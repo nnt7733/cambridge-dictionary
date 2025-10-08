@@ -8,8 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Publish job will need to upload a release, so grant token write perms
+  # (job-level permissions are allowed, but we also set at workflow root here)
+
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -36,6 +41,8 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -82,4 +89,48 @@ jobs:
       with:
         name: Cambridge-Dictionary-macOS-DMG
         path: dist/Cambridge-Dictionary.dmg
+
+  publish-release:
+    name: Publish Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # allow creating/updating releases
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Cambridge-Dictionary-Windows
+          path: release_assets/windows
+
+      - name: Download macOS APP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Cambridge-Dictionary-macOS-APP
+          path: release_assets/macos_app
+
+      - name: Download macOS DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Cambridge-Dictionary-macOS-DMG
+          path: release_assets/macos_dmg
+
+      - name: List assets
+        run: |
+          ls -R release_assets || true
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Cambridge Dictionary v${{ github.run_number }}
+          draft: false
+          prerelease: false
+          files: |
+            release_assets/windows/EnglishVietnameseDictionary.exe
+            release_assets/macos_dmg/Cambridge-Dictionary.dmg
+            release_assets/macos_app/**
 
