@@ -29,7 +29,7 @@ class CambridgeDictionaryApp:
         # Translator với retry logic
         self.translator = GoogleTranslator(source='en', target='vi')
         # Gemini context-aware
-        self.gemini_api_key = os.getenv('GEMINI_API_KEY', '').strip()
+        self.gemini_api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyCz0JtTfcbSjhQ54wux1QPHvQGDGCjbzmw').strip()
         self.gemini_enabled = False
         if self.gemini_api_key:
             try:
