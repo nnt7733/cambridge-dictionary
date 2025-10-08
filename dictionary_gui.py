@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import pyttsx3
 from deep_translator import GoogleTranslator
+import google.generativeai as genai
 import threading
 import json
 import os
@@ -27,6 +28,16 @@ class CambridgeDictionaryApp:
         
         # Translator với retry logic
         self.translator = GoogleTranslator(source='en', target='vi')
+        # Gemini context-aware
+        self.gemini_api_key = os.getenv('GEMINI_API_KEY', '').strip()
+        self.gemini_enabled = False
+        if self.gemini_api_key:
+            try:
+                genai.configure(api_key=self.gemini_api_key)
+                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_enabled = True
+            except Exception:
+                self.gemini_enabled = False
         
         # Cache để tăng tốc EXTREME
         self.translation_cache = {}
@@ -84,7 +95,7 @@ class CambridgeDictionaryApp:
         except Exception as e:
             print(f"Lỗi khi lưu từ vựng: {e}")
     
-    def add_to_vocabulary(self, word, phonetic_uk, phonetic_us, definitions):
+    def add_to_vocabulary(self, word, phonetic_uk, phonetic_us, definitions, ai_vi=None, ai_example_en=None):
         """Thêm từ vào danh sách ghi nhớ"""
         vocab_item = {
             'word': word,
@@ -93,6 +104,10 @@ class CambridgeDictionaryApp:
             'definitions': definitions,
             'added_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        if ai_vi:
+            vocab_item['ai_vi'] = ai_vi
+        if ai_example_en:
+            vocab_item['ai_example_en'] = ai_example_en
         
         for item in self.vocabulary:
             if item['word'].lower() == word.lower():
@@ -201,6 +216,19 @@ class CambridgeDictionaryApp:
             command=self.show_vocabulary
         )
         self.view_vocab_btn.pack(side=tk.LEFT, padx=(10, 0))
+        # Context input
+        ctx_frame = tk.Frame(self.root, bg="white")
+        ctx_frame.pack(fill=tk.X, padx=30, pady=(0, 10))
+        tk.Label(ctx_frame, text="Ngữ cảnh (tùy chọn) để AI dịch chính xác hơn:", font=("Arial", 10), bg="white", fg="#555555").pack(anchor=tk.W)
+        self.context_text = tk.Text(ctx_frame, height=3, wrap=tk.WORD, font=("Arial", 10))
+        self.context_text.pack(fill=tk.X)
+        ai_btn_frame = tk.Frame(ctx_frame, bg="white")
+        ai_btn_frame.pack(fill=tk.X, pady=(6, 0))
+        self.ai_translate_btn = tk.Button(ai_btn_frame, text="🤖 AI dịch theo ngữ cảnh", font=("Arial", 10, "bold"), bg="#0D47A1", fg="white", relief=tk.FLAT, padx=12, pady=6, cursor="hand2", command=self.run_ai_translate_current)
+        if self.gemini_enabled:
+            self.ai_translate_btn.pack(side=tk.LEFT)
+        else:
+            self.ai_translate_btn.configure(state=tk.DISABLED)
         
         # Main Content
         main_frame = tk.Frame(self.root, bg="white")
@@ -617,25 +645,11 @@ class CambridgeDictionaryApp:
         title_frame = tk.Frame(content_frame, bg="white")
         title_frame.pack(anchor=tk.W, pady=(0, 15))
         
-        word_title = tk.Label(
-            title_frame,
-            text=word_info['word'].upper(),
-            font=("Georgia", 32, "bold"),
-            bg="white",
-            fg="#002147"
-        )
+        word_title = tk.Label(title_frame, text=word_info['word'].upper(), font=("Georgia", 32, "bold"), bg="white", fg="#002147")
         word_title.pack(side=tk.LEFT)
-        
-        # Nghĩa tiếng Việt ngay bên cạnh (dịch từ word)
-        if word_info.get('word_meaning_vi'):
-            meaning_vi = tk.Label(
-                title_frame,
-                text=f"  •  {word_info['word_meaning_vi']}",
-                font=("Arial", 24),
-                bg="white",
-                fg="#0D47A1"  # Màu xanh Cambridge
-            )
-            meaning_vi.pack(side=tk.LEFT, padx=(10, 0))
+        # Placeholder AI VI label
+        self.ai_vi_label = tk.Label(title_frame, text=(f"  •  {word_info['word_meaning_vi']}" if word_info.get('word_meaning_vi') else ""), font=("Arial", 20), bg="white", fg="#0D47A1")
+        self.ai_vi_label.pack(side=tk.LEFT, padx=(10, 0))
         
         # Pronunciation
         pron_frame = tk.Frame(content_frame, bg="white")
@@ -699,6 +713,9 @@ class CambridgeDictionaryApp:
         # Definitions
         for idx, definition in enumerate(word_info['definitions'], 1):
             self._display_definition(content_frame, idx, definition)
+        # Auto AI translate if available
+        if self.gemini_enabled:
+            self.root.after(120, self.run_ai_translate_current)
     
     def _display_definition(self, parent, idx, definition):
         """Hiển thị định nghĩa với nghĩa tiếng Việt"""
@@ -802,6 +819,50 @@ class CambridgeDictionaryApp:
                     label.config(text=f"  {vi_ex}")
                 
                 threading.Thread(target=update_ex_translation, daemon=True).start()
+
+    def run_ai_translate_current(self):
+        if not self.gemini_enabled or not hasattr(self, 'current_word_info'):
+            return
+        word = self.current_word_info['word']
+        context = self.context_text.get('1.0', tk.END).strip()
+        defs_en = [d.get('definition', '') for d in self.current_word_info.get('definitions', [])][:3]
+
+        def worker():
+            vi, example_en = self.ai_translate_with_context(word, defs_en, context)
+            if vi:
+                self.ai_vi_label.config(text=f"  •  {vi}")
+            self.current_ai_vi = vi
+            self.current_ai_example_en = example_en
+        threading.Thread(target=worker, daemon=True).start()
+
+    def ai_translate_with_context(self, word: str, defs_en: list, context: str):
+        try:
+            prompt = (
+                "You are a bilingual English-Vietnamese lexicographer. Given an English headword, its brief glosses, "
+                "and an optional user-provided context, produce: (1) a concise Vietnamese meaning of the headword "
+                "that best fits the context (≤6 words), and (2) one short English example sentence that naturally uses the word. "
+                "Output as JSON: {\"vi_meaning\": string, \"example_en\": string}.\n\n"
+                f"Headword: {word}\nGlosses: {defs_en}\nContext: {context or '(none)'}\n"
+            )
+            resp = self.gemini_model.generate_content(prompt)
+            text = (getattr(resp, 'text', None) or '').strip()
+            vi, ex = None, None
+            import json as _json, re as _re
+            m = _re.search(r"\{[\s\S]*\}", text)
+            if m:
+                try:
+                    obj = _json.loads(m.group(0))
+                    vi = obj.get('vi_meaning')
+                    ex = obj.get('example_en')
+                except Exception:
+                    pass
+            if not vi and text:
+                vi = text.split('\n')[0][:60]
+            if not ex:
+                ex = f"{word.capitalize()} is used naturally in this context."
+            return (vi.strip() if vi else None), (ex.strip() if ex else None)
+        except Exception:
+            return None, None
     
     def play_audio(self, audio_url, word, region='uk'):
         """Phát audio từ Cambridge hoặc fallback sang TTS"""
@@ -850,7 +911,9 @@ class CambridgeDictionaryApp:
                 self.current_word_info['word'],
                 self.current_word_info['phonetic_uk'],
                 self.current_word_info['phonetic_us'],
-                self.current_word_info['definitions']
+                self.current_word_info['definitions'],
+                getattr(self, 'current_ai_vi', None),
+                getattr(self, 'current_ai_example_en', None)
             )
         else:
             messagebox.showwarning("Cảnh báo", "Vui lòng tra từ trước!")
@@ -915,9 +978,9 @@ class CambridgeDictionaryApp:
                 phonetic_us = item.get('phonetic_us', '')
                 definitions = item.get('definitions', [])
                 
-                # Lấy ví dụ đầu tiên (nếu có)
-                example = ""
-                if definitions and definitions[0].get('examples'):
+                # Lấy ví dụ: ưu tiên AI example nếu có
+                example = item.get('ai_example_en') or ""
+                if not example and definitions and definitions[0].get('examples'):
                     example = definitions[0]['examples'][0]
                 
                 # Cột A: Từ + IPA + Example
@@ -928,8 +991,8 @@ class CambridgeDictionaryApp:
                 if example:
                     cell_a_text += f"\nExam: {example}"
                 
-                # Cột B: Nghĩa tiếng Việt (dịch từ WORD, không phải definition)
-                meaning_vi = self.translate_text(word)
+                # Cột B: Nghĩa tiếng Việt - ưu tiên ai_vi nếu có
+                meaning_vi = item.get('ai_vi') or self.translate_text(word)
                 
                 ws[f'A{row}'] = cell_a_text
                 ws[f'B{row}'] = meaning_vi
