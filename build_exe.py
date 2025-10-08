@@ -29,9 +29,9 @@ PyInstaller.__main__.run([
 ])
 
 print("\n" + "="*70)
-print("✅ BUILD HOÀN TẤT!")
+print("BUILD COMPLETED")
 print("="*70)
-print(f"\n📁 File .exe được tạo tại: {current_dir}\\dist\\EnglishVietnameseDictionary.exe")
-print("\nBạn có thể copy file .exe này đi bất cứ đâu và chạy mà không cần cài Python!")
+print(f"\nFile .exe created at: {current_dir}\\dist\\EnglishVietnameseDictionary.exe")
+print("\nYou can copy this .exe anywhere and run it without installing Python.")
 print("="*70)
 
