@@ -1,0 +1,89 @@
+name: Build Dictionary App
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Windows EXE
+      run: python build_exe.py
+    
+    - name: Upload Windows Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: Cambridge-Dictionary-Windows
+        path: dist/EnglishVietnameseDictionary.exe
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build macOS APP
+      run: |
+        pyinstaller --name="Cambridge Dictionary" \
+                    --onefile \
+                    --windowed \
+                    --add-data="common_words.txt:." \
+                    --hidden-import=pyttsx3.drivers \
+                    --hidden-import=pyttsx3.drivers.sapi5 \
+                    --hidden-import=comtypes.client \
+                    --hidden-import=comtypes.stream \
+                    --hidden-import=win32com \
+                    --hidden-import=win32com.client \
+                    dictionary_gui.py
+    
+    - name: Create DMG (optional)
+      run: |
+        # Tạo folder để đóng gói
+        mkdir -p dist/dmg
+        cp -r "dist/Cambridge Dictionary.app" dist/dmg/
+        # Tạo symbolic link đến Applications
+        ln -s /Applications dist/dmg/Applications
+        # Tạo DMG
+        hdiutil create -volname "Cambridge Dictionary" -srcfolder dist/dmg -ov -format UDZO dist/Cambridge-Dictionary.dmg
+    
+    - name: Upload macOS APP
+      uses: actions/upload-artifact@v3
+      with:
+        name: Cambridge-Dictionary-macOS-APP
+        path: dist/Cambridge Dictionary.app
+    
+    - name: Upload macOS DMG
+      uses: actions/upload-artifact@v3
+      with:
+        name: Cambridge-Dictionary-macOS-DMG
+        path: dist/Cambridge-Dictionary.dmg
+

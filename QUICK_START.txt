@@ -1,0 +1,90 @@
+╔═══════════════════════════════════════════════════════════════╗
+║              HƯỚNG DẪN NHANH - CHIA SẺ APP                   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+🎯 BẠN CẦN BUILD APP CHO CẢ WINDOWS VÀ MAC:
+
+
+CÁCH 1: GITHUB ACTIONS (TỰ ĐỘNG BUILD) ⭐⭐⭐⭐⭐
+════════════════════════════════════════════════
+
+   Bước 1: Tạo repository trên GitHub.com
+   
+   Bước 2: Double-click: push_to_github.bat
+           → Nhập URL repository
+           → Đợi push xong
+   
+   Bước 3: Vào GitHub → Tab "Actions"
+           → Đợi build xong (5-10 phút)
+   
+   Bước 4: Download Artifacts:
+           ✅ Cambridge-Dictionary-Windows.exe
+           ✅ Cambridge-Dictionary-macOS.app
+           ✅ Cambridge-Dictionary-macOS.dmg
+   
+   Bước 5: Chia sẻ:
+           Windows: Gửi file .exe
+           Mac: Gửi file .dmg
+
+
+═══════════════════════════════════════════════════════════════
+
+CÁCH 2: BUILD THỦ CÔNG
+════════════════════════
+
+   Windows (bạn đã có):
+   ✅ dist\EnglishVietnameseDictionary.exe
+   
+   Mac (cần máy Mac):
+   ❌ Cần build trên Mac
+   → Đọc SETUP_GITHUB.md
+
+
+═══════════════════════════════════════════════════════════════
+
+📁 FILE CHIA SẺ HIỆN CÓ:
+════════════════════════
+
+   Cho Windows:
+   📦 dist\EnglishVietnameseDictionary.exe  (60MB)
+      → Double-click là chạy
+   
+   Cho Mac/Linux:
+   📦 CambridgeDictionary_Source.zip  (27KB)
+      + README_FOR_MAC.txt
+      → Cần Python, chạy từ source
+
+
+═══════════════════════════════════════════════════════════════
+
+💡 KHUYẾN NGHỊ:
+════════════════
+
+   ⭐ Nếu có GitHub:
+      → Dùng GitHub Actions (tự động build cả 2)
+      → Đọc SETUP_GITHUB.md
+      → Chạy push_to_github.bat
+   
+   ⭐ Nếu chỉ chia sẻ Windows:
+      → Dùng dist\EnglishVietnameseDictionary.exe
+   
+   ⭐ Nếu chia sẻ Mac:
+      → Gửi CambridgeDictionary_Source.zip
+      → Kèm README_FOR_MAC.txt
+
+
+═══════════════════════════════════════════════════════════════
+
+🎉 BẠN ĐÃ CÓ TẤT CẢ!
+════════════════════════
+
+   ✅ App chạy tốt
+   ✅ File .exe sẵn sàng
+   ✅ GitHub Actions setup
+   ✅ Hướng dẫn đầy đủ
+
+
+            CHÚC BẠN THÀNH CÔNG! 🚀
+
+╚═══════════════════════════════════════════════════════════════╝
+

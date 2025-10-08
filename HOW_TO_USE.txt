@@ -1,0 +1,101 @@
+╔═══════════════════════════════════════════════════════════════╗
+║        CAMBRIDGE DICTIONARY - HƯỚNG DẪN SỬ DỤNG              ║
+║              VERSION 7.0 - AUTOCOMPLETE PRO                  ║
+╚═══════════════════════════════════════════════════════════════╝
+
+🚀 CÁCH CHẠY:
+   
+   → Double-click: run_app.bat
+
+
+⚡ MỚI TRONG VERSION 7.0:
+
+   ✅ AUTOCOMPLETE THÔNG MINH - Gợi ý khi gõ
+   ✅ 3000+ TỪ PHỔ BIẾN - Load từ file txt
+   ✅ BINARY SEARCH - Tìm kiếm siêu nhanh (<1ms)
+   ✅ LƯU LỊCH SỬ - Từ đã tra được ưu tiên
+   ✅ ĐA NGUỒN - Vocabulary + History + Common words
+
+
+📖 AUTOCOMPLETE:
+
+   Gõ: "bea"
+   
+   ┌──────────────┐
+   │ [bea...]     │ ← Đang gõ
+   ├──────────────┤
+   │ beautiful    │ ← Dropdown xuất hiện!
+   │ beast        │
+   │ beat         │
+   │ beauty       │
+   └──────────────┘
+   
+   Click vào → Tự động tra từ!
+
+
+🎯 CÁCH SỬ DỤNG:
+
+   1. Gõ từ (từ 2 ký tự)
+   2. Thấy dropdown gợi ý
+   3. Click chọn hoặc gõ tiếp
+   4. Enter → Tra từ!
+
+
+📊 NGUỒN GỢI Ý (theo thứ tự):
+
+   1️⃣ Vocabulary (từ đã lưu)      - Ưu tiên cao
+   2️⃣ History (từ đã tra)         - Ưu tiên cao
+   3️⃣ Common words (3000+ từ)     - File txt
+
+
+⚡ PERFORMANCE:
+
+   📁 File: common_words.txt (3000+ từ)
+   ⏱️  Load time: ~10ms (1 lần khởi động)
+   🔍 Search time: <1ms (binary search)
+   💾 Memory: ~500KB
+
+
+🔨 BUILD .EXE:
+
+   → Double-click: build.bat
+   
+   ✅ File common_words.txt tự động bundle vào .exe
+   ✅ Bạn bè chỉ cần 1 file .exe duy nhất!
+
+
+📝 TẠO FILE COMMON_WORDS.TXT:
+
+   Format:
+   - Mỗi dòng 1 từ
+   - Sorted A-Z
+   - Lowercase
+   
+   Ví dụ:
+   abandon
+   ability
+   able
+   about
+   ...
+
+
+💡 MẸO HAY:
+
+   ✓ Gõ 2-3 ký tự đầu → Thấy gợi ý ngay
+   ✓ Từ đã tra sẽ ưu tiên hiện lên
+   ✓ Nhấn ESC để ẩn dropdown
+   ✓ Click vào suggestion → Tra ngay!
+
+
+═══════════════════════════════════════════════════════════════
+
+        🎯 VERSION 7.0 - AUTOCOMPLETE LIKE CAMBRIDGE! 🎯
+        
+        • Gợi ý thông minh ✅
+        • Binary search nhanh ✅
+        • 3000+ từ phổ biến ✅
+        • Load từ file .txt ✅
+        
+        CHÚC BẠN HỌC TIẾNG ANH HIỆU QUẢ! 📚✨
+
+╚═══════════════════════════════════════════════════════════════╝
