@@ -72,11 +72,16 @@ jobs:
       run: |
         # Tạo folder để đóng gói
         mkdir -p dist/dmg
+        # Đợi một chút để filesystem sync
+        sleep 2
         cp -r "dist/Cambridge Dictionary.app" dist/dmg/
         # Tạo symbolic link đến Applications
         ln -s /Applications dist/dmg/Applications
-        # Tạo DMG
-        hdiutil create -volname "Cambridge Dictionary" -srcfolder dist/dmg -ov -format UDZO dist/Cambridge-Dictionary.dmg
+        # Đợi trước khi tạo DMG
+        sleep 1
+        # Tạo DMG với filesystem APFS
+        hdiutil create -volname "Cambridge Dictionary" -srcfolder dist/dmg -ov -format UDZO -fs APFS dist/Cambridge-Dictionary.dmg || \
+        hdiutil create -volname "Cambridge Dictionary" -srcfolder dist/dmg -ov -format UDBZ dist/Cambridge-Dictionary.dmg
     
     - name: Upload macOS APP
       uses: actions/upload-artifact@v4
