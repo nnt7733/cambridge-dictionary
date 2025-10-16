@@ -34,9 +34,11 @@ class CambridgeDictionaryApp:
         if self.gemini_api_key:
             try:
                 genai.configure(api_key=self.gemini_api_key)
-                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
                 self.gemini_enabled = True
-            except Exception:
+                print("[Gemini] Initialized successfully with gemini-2.0-flash-exp")
+            except Exception as e:
+                print(f"[Gemini] Failed to initialize: {e}")
                 self.gemini_enabled = False
         
         # Cache để tăng tốc EXTREME
@@ -111,7 +113,16 @@ class CambridgeDictionaryApp:
         
         for item in self.vocabulary:
             if item['word'].lower() == word.lower():
-                messagebox.showinfo("Thông báo", f"Từ '{word}' đã có trong danh sách!")
+                # Update existing instead of duplicate
+                item['phonetic_uk'] = phonetic_uk
+                item['phonetic_us'] = phonetic_us
+                item['definitions'] = definitions
+                if ai_vi:
+                    item['ai_vi'] = ai_vi
+                if ai_example_en:
+                    item['ai_example_en'] = ai_example_en
+                self.save_vocabulary()
+                messagebox.showinfo("Cập nhật", f"Đã cập nhật '{word}' trong danh sách!")
                 return
         
         self.vocabulary.append(vocab_item)
@@ -156,7 +167,16 @@ class CambridgeDictionaryApp:
         )
         self.word_entry.pack(fill=tk.X, ipady=8)
         self.word_entry.bind('<Return>', lambda e: self.search_word())
-        self.word_entry.bind('<KeyRelease>', self.on_key_release)
+        # Debounce search typing
+        self._search_after_id = None
+        def _debounced_key_release(event):
+            if self._search_after_id:
+                try:
+                    self.root.after_cancel(self._search_after_id)
+                except Exception:
+                    pass
+            self._search_after_id = self.root.after(250, self.on_key_release, event)
+        self.word_entry.bind('<KeyRelease>', _debounced_key_release)
         
         # Suggestion listbox (ẩn ban đầu)
         self.suggestion_listbox = tk.Listbox(
@@ -168,6 +188,10 @@ class CambridgeDictionaryApp:
         )
         self.suggestion_listbox.bind('<<ListboxSelect>>', self.on_suggestion_select)
         self.suggestion_listbox.bind('<Button-1>', self.on_suggestion_click)
+        self.suggestion_listbox.bind('<Return>', self.on_suggestion_enter)
+        self.suggestion_listbox.bind('<Escape>', lambda e: self.hide_suggestions())
+        self.word_entry.bind('<Down>', self.focus_suggestion)
+        self.word_entry.bind('<Escape>', lambda e: self.hide_suggestions())
         
         # History từ đã tra
         self.search_history = []
@@ -229,6 +253,30 @@ class CambridgeDictionaryApp:
             self.ai_translate_btn.pack(side=tk.LEFT)
         else:
             self.ai_translate_btn.configure(state=tk.DISABLED)
+
+        # AI status label
+        self.ai_status_var = tk.StringVar(value="")
+        self.ai_status_label = tk.Label(
+            ai_btn_frame,
+            textvariable=self.ai_status_var,
+            font=("Arial", 10),
+            bg="white",
+            fg="#666666"
+        )
+        self.ai_status_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Debounce for context changes
+        self._ai_ctx_after_id = None
+        def _on_ctx_key_release(event):
+            if not self.gemini_enabled or not hasattr(self, 'current_word_info'):
+                return
+            if self._ai_ctx_after_id:
+                try:
+                    self.root.after_cancel(self._ai_ctx_after_id)
+                except Exception:
+                    pass
+            self._ai_ctx_after_id = self.root.after(700, self.run_ai_translate_current)
+        self.context_text.bind('<KeyRelease>', _on_ctx_key_release)
         
         # Main Content
         main_frame = tk.Frame(self.root, bg="white")
@@ -286,17 +334,28 @@ class CambridgeDictionaryApp:
             widget.destroy()
     
     def translate_text(self, text):
-        """Dịch với cache - KHÔNG BAO GIỜ THẤT BẠI"""
+        """Dịch với AI (ưu tiên) hoặc Google Translate fallback"""
         # Kiểm tra cache trước
         if text in self.translation_cache:
             return self.translation_cache[text]
         
-        # Thử dịch với retry
+        # Ưu tiên dùng AI nếu enabled
+        if self.gemini_enabled:
+            try:
+                vi_text = self.ai_translate_simple(text)
+                if vi_text:
+                    self.translation_cache[text] = vi_text
+                    if len(self.translation_cache) % 10 == 0:
+                        self.save_cache()
+                    return vi_text
+            except Exception as e:
+                print(f"[AI Translate] Error: {e}")
+        
+        # Fallback: Google Translate
         for attempt in range(2):
             try:
                 translation = self.translator.translate(text)
                 self.translation_cache[text] = translation
-                # Lưu cache sau mỗi lần dịch thành công
                 if len(self.translation_cache) % 10 == 0:
                     self.save_cache()
                 return translation
@@ -305,10 +364,25 @@ class CambridgeDictionaryApp:
                     time.sleep(0.5)
                     continue
                 else:
-                    # Nếu fail hẳn, trả về text gốc
                     return f"[{text}]"
         
         return text
+    
+    def ai_translate_simple(self, text: str) -> str:
+        """Dịch đơn giản EN->VI bằng AI"""
+        try:
+            prompt = f"Translate to Vietnamese (keep it natural and concise): {text}"
+            resp = self.gemini_model.generate_content(prompt)
+            result = (getattr(resp, 'text', None) or '').strip()
+            # Remove quotes if wrapped
+            if result.startswith('"') and result.endswith('"'):
+                result = result[1:-1]
+            if result.startswith("'") and result.endswith("'"):
+                result = result[1:-1]
+            return result if result else None
+        except Exception as e:
+            print(f"[AI Simple] Error: {e}")
+            return None
     
     def search_word(self):
         word = self.word_entry.get().strip()
@@ -454,6 +528,9 @@ class CambridgeDictionaryApp:
         
         # Hiển thị listbox
         self.suggestion_listbox.pack(fill=tk.X, pady=(2, 0))
+        # Select first item for keyboard nav
+        if self.suggestion_listbox.size() > 0:
+            self.suggestion_listbox.selection_set(0)
     
     def hide_suggestions(self):
         """Ẩn dropdown suggestions"""
@@ -461,7 +538,11 @@ class CambridgeDictionaryApp:
     
     def on_suggestion_select(self, event):
         """Khi chọn suggestion bằng keyboard"""
-        pass
+        selection = self.suggestion_listbox.curselection()
+        if selection:
+            word = self.suggestion_listbox.get(selection[0])
+            self.word_entry.delete(0, tk.END)
+            self.word_entry.insert(0, word)
     
     def on_suggestion_click(self, event):
         """Khi click vào suggestion"""
@@ -475,13 +556,37 @@ class CambridgeDictionaryApp:
                 self.search_word()
         except:
             pass
+
+    def focus_suggestion(self, event):
+        try:
+            if self.suggestion_listbox.size() > 0:
+                self.suggestion_listbox.focus_set()
+                self.suggestion_listbox.activate(0)
+                self.suggestion_listbox.selection_clear(0, tk.END)
+                self.suggestion_listbox.selection_set(0)
+        except:
+            pass
+        return 'break'
+
+    def on_suggestion_enter(self, event):
+        try:
+            selection = self.suggestion_listbox.curselection()
+            if selection:
+                word = self.suggestion_listbox.get(selection[0])
+                self.word_entry.delete(0, tk.END)
+                self.word_entry.insert(0, word)
+                self.hide_suggestions()
+                self.search_word()
+        except:
+            pass
+        return 'break'
     
     def get_word_info(self, word):
         """Lấy thông tin từ Cambridge - OPTIMIZED EXTREME"""
         url = f"https://dictionary.cambridge.org/dictionary/english/{word.lower()}"
         
         try:
-            response = self.session.get(url, timeout=5)
+            response = self.session.get(url, timeout=6)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'lxml')
@@ -645,10 +750,10 @@ class CambridgeDictionaryApp:
         title_frame = tk.Frame(content_frame, bg="white")
         title_frame.pack(anchor=tk.W, pady=(0, 15))
         
-        word_title = tk.Label(title_frame, text=word_info['word'].upper(), font=("Georgia", 32, "bold"), bg="white", fg="#002147")
+        word_title = tk.Label(title_frame, text=word_info['word'].upper(), font=("Georgia", 30, "bold"), bg="white", fg="#002147")
         word_title.pack(side=tk.LEFT)
         # Placeholder AI VI label
-        self.ai_vi_label = tk.Label(title_frame, text=(f"  •  {word_info['word_meaning_vi']}" if word_info.get('word_meaning_vi') else ""), font=("Arial", 20), bg="white", fg="#0D47A1")
+        self.ai_vi_label = tk.Label(title_frame, text=(f"  •  {word_info['word_meaning_vi']}" if word_info.get('word_meaning_vi') else ""), font=("Arial", 16), bg="white", fg="#0D47A1")
         self.ai_vi_label.pack(side=tk.LEFT, padx=(10, 0))
         
         # Pronunciation
@@ -673,13 +778,23 @@ class CambridgeDictionaryApp:
                 command=lambda: self.play_audio(word_info.get('audio_uk', ''), word_info['word'], 'uk')
             ).pack(side=tk.LEFT)
             
-            tk.Label(
+            uk_ipa_label = tk.Label(
                 uk_frame,
                 text=f"/{word_info['phonetic_uk']}/",
-                font=("Arial", 15),
+                font=("Arial", 14),
                 bg="white",
                 fg="#E74C3C"
-            ).pack(side=tk.LEFT, padx=(8, 0))
+            )
+            uk_ipa_label.pack(side=tk.LEFT, padx=(8, 4))
+            tk.Button(
+                uk_frame,
+                text="Copy",
+                font=("Arial", 9),
+                bg="#F5F5F5",
+                relief=tk.SOLID,
+                borderwidth=1,
+                command=lambda t=uk_ipa_label.cget('text'): self.copy_to_clipboard(t)
+            ).pack(side=tk.LEFT)
         
         if word_info['phonetic_us']:
             us_frame = tk.Frame(pron_frame, bg="white")
@@ -699,13 +814,23 @@ class CambridgeDictionaryApp:
                 command=lambda: self.play_audio(word_info.get('audio_us', ''), word_info['word'], 'us')
             ).pack(side=tk.LEFT)
             
-            tk.Label(
+            us_ipa_label = tk.Label(
                 us_frame,
                 text=f"/{word_info['phonetic_us']}/",
-                font=("Arial", 15),
+                font=("Arial", 14),
                 bg="white",
                 fg="#E74C3C"
-            ).pack(side=tk.LEFT, padx=(8, 0))
+            )
+            us_ipa_label.pack(side=tk.LEFT, padx=(8, 4))
+            tk.Button(
+                us_frame,
+                text="Copy",
+                font=("Arial", 9),
+                bg="#F5F5F5",
+                relief=tk.SOLID,
+                borderwidth=1,
+                command=lambda t=us_ipa_label.cget('text'): self.copy_to_clipboard(t)
+            ).pack(side=tk.LEFT)
         
         # Separator
         tk.Frame(content_frame, height=2, bg="#E0E0E0").pack(fill=tk.X, pady=15)
@@ -716,6 +841,14 @@ class CambridgeDictionaryApp:
         # Auto AI translate if available
         if self.gemini_enabled:
             self.root.after(120, self.run_ai_translate_current)
+
+    def copy_to_clipboard(self, text: str):
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.root.update()  # keep clipboard after window closed
+        except Exception as e:
+            print(f"Copy failed: {e}")
     
     def _display_definition(self, parent, idx, definition):
         """Hiển thị định nghĩa với nghĩa tiếng Việt"""
@@ -751,7 +884,7 @@ class CambridgeDictionaryApp:
             fg="#002147"
         ).pack(side=tk.LEFT, anchor=tk.N, padx=(0, 8))
         
-        tk.Label(
+        def_text_label = tk.Label(
             en_def_frame,
             text=definition['definition'],
             font=("Arial", 12),
@@ -759,7 +892,17 @@ class CambridgeDictionaryApp:
             fg="#002147",
             wraplength=350,
             justify=tk.LEFT
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        )
+        def_text_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(
+            en_def_frame,
+            text="Copy",
+            font=("Arial", 9),
+            bg="#F5F5F5",
+            relief=tk.SOLID,
+            borderwidth=1,
+            command=lambda t=definition['definition']: self.copy_to_clipboard(t)
+        ).pack(side=tk.LEFT, padx=(6, 0))
         
         # Right: Vietnamese - PLACEHOLDER trước, cập nhật sau
         right_frame = tk.Frame(def_row, bg="#F0F4FF", relief=tk.SOLID, borderwidth=1)
@@ -791,7 +934,7 @@ class CambridgeDictionaryApp:
                 ex_frame = tk.Frame(left_frame, bg="white")
                 ex_frame.pack(fill=tk.X, pady=(5, 0), padx=(25, 0))
                 
-                tk.Label(
+                ex_text_label = tk.Label(
                     ex_frame,
                     text=f"• {ex}",
                     font=("Arial", 11, "italic"),
@@ -799,7 +942,17 @@ class CambridgeDictionaryApp:
                     fg="#666666",
                     wraplength=320,
                     justify=tk.LEFT
-                ).pack(anchor=tk.W)
+                )
+                ex_text_label.pack(side=tk.LEFT, anchor=tk.W)
+                tk.Button(
+                    ex_frame,
+                    text="Copy",
+                    font=("Arial", 9),
+                    bg="#F5F5F5",
+                    relief=tk.SOLID,
+                    borderwidth=1,
+                    command=lambda t=ex: self.copy_to_clipboard(t)
+                ).pack(side=tk.LEFT, padx=(6,0))
                 
                 # Vietnamese example - placeholder
                 vi_ex_label = tk.Label(
@@ -827,12 +980,28 @@ class CambridgeDictionaryApp:
         context = self.context_text.get('1.0', tk.END).strip()
         defs_en = [d.get('definition', '') for d in self.current_word_info.get('definitions', [])][:3]
 
+        # UI: show loading and disable button
+        try:
+            self.ai_status_var.set("Đang gọi AI…")
+            self.ai_translate_btn.configure(state=tk.DISABLED, text="Đang dịch…")
+        except Exception:
+            pass
+
         def worker():
             vi, example_en = self.ai_translate_with_context(word, defs_en, context)
-            if vi:
-                self.ai_vi_label.config(text=f"  •  {vi}")
-            self.current_ai_vi = vi
-            self.current_ai_example_en = example_en
+            def done():
+                try:
+                    if vi:
+                        self.ai_vi_label.config(text=f"  •  {vi}")
+                        self.ai_status_var.set("Hoàn tất")
+                    else:
+                        self.ai_status_var.set("AI không trả kết quả")
+                    self.ai_translate_btn.configure(state=tk.NORMAL, text="🤖 AI dịch theo ngữ cảnh")
+                except Exception:
+                    pass
+                self.current_ai_vi = vi
+                self.current_ai_example_en = example_en
+            self.root.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
 
     def ai_translate_with_context(self, word: str, defs_en: list, context: str):
@@ -844,8 +1013,10 @@ class CambridgeDictionaryApp:
                 "Output as JSON: {\"vi_meaning\": string, \"example_en\": string}.\n\n"
                 f"Headword: {word}\nGlosses: {defs_en}\nContext: {context or '(none)'}\n"
             )
+            print(f"[AI] Calling Gemini for '{word}' with context: {context[:50] if context else '(none)'}")
             resp = self.gemini_model.generate_content(prompt)
             text = (getattr(resp, 'text', None) or '').strip()
+            print(f"[AI] Response: {text[:200]}")
             vi, ex = None, None
             import json as _json, re as _re
             m = _re.search(r"\{[\s\S]*\}", text)
@@ -854,14 +1025,22 @@ class CambridgeDictionaryApp:
                     obj = _json.loads(m.group(0))
                     vi = obj.get('vi_meaning')
                     ex = obj.get('example_en')
-                except Exception:
-                    pass
+                    print(f"[AI] Parsed: vi={vi}, ex={ex}")
+                except Exception as parse_err:
+                    print(f"[AI] JSON parse error: {parse_err}")
             if not vi and text:
                 vi = text.split('\n')[0][:60]
+                print(f"[AI] Fallback vi from first line: {vi}")
             if not ex:
                 ex = f"{word.capitalize()} is used naturally in this context."
             return (vi.strip() if vi else None), (ex.strip() if ex else None)
-        except Exception:
+        except Exception as e:
+            print(f"[AI] Error: {type(e).__name__}: {str(e)}")
+            try:
+                self.ai_status_var.set(f"Lỗi: {type(e).__name__}")
+                self.ai_translate_btn.configure(state=tk.NORMAL, text="🤖 AI dịch theo ngữ cảnh")
+            except Exception:
+                pass
             return None, None
     
     def play_audio(self, audio_url, word, region='uk'):
@@ -880,7 +1059,7 @@ class CambridgeDictionaryApp:
             import io
             
             # Download audio
-            response = self.session.get(audio_url, timeout=5)
+            response = self.session.get(audio_url, timeout=6)
             audio_data = io.BytesIO(response.content)
             
             # Play audio
@@ -929,14 +1108,29 @@ class CambridgeDictionaryApp:
             from openpyxl.styles import Font, Alignment, PatternFill
             from tkinter import filedialog
             
-            # Hỏi có xóa từ sau khi export không
-            if not clear_after_export:
-                clear_after_export = messagebox.askyesno(
-                    "Xóa từ vựng?",
-                    "Bạn có muốn XÓA TẤT CẢ từ vựng sau khi export không?\n\n"
-                    "✅ Yes: Export rồi xóa hết\n"
-                    "❌ No: Giữ nguyên từ vựng"
-                )
+            # Hộp chọn tuỳ chọn export
+            options = tk.Toplevel(self.root)
+            options.title("Tùy chọn Export")
+            options.geometry("380x180")
+            del_var = tk.BooleanVar(value=True)
+            tk.Label(options, text="Tùy chọn trước khi export:", font=("Arial", 12, "bold")).pack(pady=10)
+            tk.Checkbutton(options, text="Xóa TẤT CẢ từ vựng sau khi export", variable=del_var).pack()
+            confirmed = {'ok': False}
+            def _ok():
+                confirmed['ok'] = True
+                options.destroy()
+            def _cancel():
+                options.destroy()
+            btnf = tk.Frame(options)
+            btnf.pack(pady=15)
+            tk.Button(btnf, text="OK", width=10, command=_ok).pack(side=tk.LEFT, padx=6)
+            tk.Button(btnf, text="Hủy", width=10, command=_cancel).pack(side=tk.LEFT)
+            options.transient(self.root)
+            options.grab_set()
+            self.root.wait_window(options)
+            if not confirmed['ok']:
+                return
+            clear_after_export = del_var.get()
             
             # Chọn nơi lưu file
             file_path = filedialog.asksaveasfilename(
