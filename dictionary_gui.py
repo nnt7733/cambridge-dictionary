@@ -16,9 +16,17 @@ import bisect
 class CambridgeDictionaryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Cambridge Dictionary")
-        self.root.geometry("1000x750")
+        self.root.title("Cambridge Dictionary - AI Enhanced")
+        self.root.geometry("1200x800")
         self.root.resizable(True, True)
+        
+        # Configure modern styling
+        self.root.configure(bg="#f8f9fa")
+        
+        # Tab system
+        self.tabs = {}
+        self.current_tab = None
+        self.tab_counter = 0
         
         # Khởi tạo TTS engine
         try:
@@ -130,43 +138,127 @@ class CambridgeDictionaryApp:
         messagebox.showinfo("Thành công", f"Đã thêm '{word}' vào danh sách!")
         
     def setup_ui(self):
-        # Colors
-        CAMBRIDGE_BLUE = "#00A7E1"
-        DARK_BLUE = "#002147"
+        # Modern color scheme
+        self.colors = {
+            'primary': '#1e3a8a',      # Deep blue
+            'secondary': '#3b82f6',    # Bright blue
+            'accent': '#10b981',       # Green
+            'warning': '#f59e0b',      # Orange
+            'danger': '#ef4444',       # Red
+            'dark': '#1f2937',         # Dark gray
+            'light': '#f8fafc',        # Light gray
+            'white': '#ffffff',
+            'border': '#e5e7eb'        # Light border
+        }
         
-        # Header
-        header_frame = tk.Frame(self.root, bg=DARK_BLUE, height=70)
+        # Header with modern design
+        self.setup_header()
+        
+        # Tab system
+        self.setup_tab_system()
+        
+        # Search bar
+        self.setup_search_bar()
+        
+        # Main content area
+        self.setup_main_content()
+        
+        # Create initial tab
+        self.create_new_tab("Welcome")
+        self.show_welcome()
+        
+    def setup_header(self):
+        """Setup modern header"""
+        header_frame = tk.Frame(self.root, bg=self.colors['primary'], height=60)
         header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        # Title with icon
+        title_frame = tk.Frame(header_frame, bg=self.colors['primary'])
+        title_frame.pack(side=tk.LEFT, padx=20, pady=15)
         
         title_label = tk.Label(
-            header_frame,
-            text="Cambridge Dictionary",
-            font=("Georgia", 24, "bold"),
-            bg=DARK_BLUE,
-            fg="white",
-            pady=15
+            title_frame,
+            text="📚 Cambridge Dictionary",
+            font=("Segoe UI", 20, "bold"),
+            bg=self.colors['primary'],
+            fg=self.colors['white']
         )
-        title_label.pack()
+        title_label.pack(side=tk.LEFT)
         
-        # Search Frame
-        search_frame = tk.Frame(self.root, bg="white", height=80)
-        search_frame.pack(fill=tk.X, padx=30, pady=20)
+        subtitle_label = tk.Label(
+            title_frame,
+            text="AI Enhanced",
+            font=("Segoe UI", 10),
+            bg=self.colors['primary'],
+            fg="#94a3b8"
+        )
+        subtitle_label.pack(side=tk.LEFT, padx=(10, 0))
         
-        search_container = tk.Frame(search_frame, bg="white")
-        search_container.pack(fill=tk.X)
+        # Right side buttons
+        btn_frame = tk.Frame(header_frame, bg=self.colors['primary'])
+        btn_frame.pack(side=tk.RIGHT, padx=20, pady=15)
         
-        # Entry frame với suggestion
-        entry_wrapper = tk.Frame(search_container, bg="white")
-        entry_wrapper.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # New tab button
+        new_tab_btn = tk.Button(
+            btn_frame,
+            text="➕ New Tab",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=self.create_new_tab
+        )
+        new_tab_btn.pack(side=tk.LEFT, padx=(0, 10))
         
+        # Vocabulary button
+        vocab_btn = tk.Button(
+            btn_frame,
+            text="📚 Vocabulary",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.colors['accent'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=self.show_vocabulary
+        )
+        vocab_btn.pack(side=tk.LEFT)
+        
+    def setup_tab_system(self):
+        """Setup tab system"""
+        self.tab_frame = tk.Frame(self.root, bg=self.colors['light'], height=40)
+        self.tab_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
+        self.tab_frame.pack_propagate(False)
+        
+        # Tab container
+        self.tab_container = tk.Frame(self.tab_frame, bg=self.colors['light'])
+        self.tab_container.pack(fill=tk.X, padx=10, pady=5)
+        
+    def setup_search_bar(self):
+        """Setup modern search bar"""
+        search_frame = tk.Frame(self.root, bg=self.colors['white'])
+        search_frame.pack(fill=tk.X, padx=20, pady=15)
+        
+        # Search container with rounded appearance
+        search_container = tk.Frame(search_frame, bg=self.colors['white'], relief=tk.SOLID, bd=1)
+        search_container.pack(fill=tk.X, ipady=10)
+        
+        # Search entry
         self.word_entry = tk.Entry(
-            entry_wrapper,
-            font=("Arial", 16),
-            relief=tk.SOLID,
-            borderwidth=2
+            search_container,
+            font=("Segoe UI", 14),
+            relief=tk.FLAT,
+            bd=0,
+            bg=self.colors['white']
         )
-        self.word_entry.pack(fill=tk.X, ipady=8)
+        self.word_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=15, pady=10)
         self.word_entry.bind('<Return>', lambda e: self.search_word())
+        
         # Debounce search typing
         self._search_after_id = None
         def _debounced_key_release(event):
@@ -178,13 +270,30 @@ class CambridgeDictionaryApp:
             self._search_after_id = self.root.after(250, self.on_key_release, event)
         self.word_entry.bind('<KeyRelease>', _debounced_key_release)
         
-        # Suggestion listbox (ẩn ban đầu)
+        # Search button
+        self.search_btn = tk.Button(
+            search_container,
+            text="🔍 Search",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=20,
+            pady=10,
+            cursor="hand2",
+            command=self.search_word
+        )
+        self.search_btn.pack(side=tk.RIGHT, padx=(0, 15))
+        
+        # Suggestion listbox (hidden initially)
         self.suggestion_listbox = tk.Listbox(
-            entry_wrapper,
-            font=("Arial", 12),
+            search_frame,
+            font=("Segoe UI", 11),
             height=5,
             relief=tk.SOLID,
-            borderwidth=1
+            bd=1,
+            bg=self.colors['white'],
+            selectbackground=self.colors['secondary']
         )
         self.suggestion_listbox.bind('<<ListboxSelect>>', self.on_suggestion_select)
         self.suggestion_listbox.bind('<Button-1>', self.on_suggestion_click)
@@ -193,98 +302,24 @@ class CambridgeDictionaryApp:
         self.word_entry.bind('<Down>', self.focus_suggestion)
         self.word_entry.bind('<Escape>', lambda e: self.hide_suggestions())
         
-        # History từ đã tra
+        # History và common words
         self.search_history = []
-        
-        # Load common words từ file
         self.common_words = self.load_common_words()
         
-        self.search_btn = tk.Button(
-            search_container,
-            text="🔍 Search",
-            font=("Arial", 14, "bold"),
-            bg=CAMBRIDGE_BLUE,
-            fg="white",
-            relief=tk.FLAT,
-            padx=25,
-            pady=10,
-            cursor="hand2",
-            command=self.search_word
-        )
-        self.search_btn.pack(side=tk.LEFT, padx=(10, 0))
+    def setup_main_content(self):
+        """Setup main content area"""
+        # Main content frame
+        self.main_frame = tk.Frame(self.root, bg=self.colors['white'])
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
         
-        self.add_vocab_btn = tk.Button(
-            search_container,
-            text="📚 Ghi nhớ",
-            font=("Arial", 12),
-            bg="#27AE60",
-            fg="white",
-            relief=tk.FLAT,
-            padx=15,
-            pady=10,
-            cursor="hand2",
-            command=self.add_current_word
-        )
-        self.add_vocab_btn.pack(side=tk.LEFT, padx=(10, 0))
+        # Content area for current tab
+        self.content_frame = tk.Frame(self.main_frame, bg=self.colors['white'])
+        self.content_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.view_vocab_btn = tk.Button(
-            search_container,
-            text="📖 Xem từ vựng",
-            font=("Arial", 12),
-            bg="#8E44AD",
-            fg="white",
-            relief=tk.FLAT,
-            padx=15,
-            pady=10,
-            cursor="hand2",
-            command=self.show_vocabulary
-        )
-        self.view_vocab_btn.pack(side=tk.LEFT, padx=(10, 0))
-        # Context input
-        ctx_frame = tk.Frame(self.root, bg="white")
-        ctx_frame.pack(fill=tk.X, padx=30, pady=(0, 10))
-        tk.Label(ctx_frame, text="Ngữ cảnh (tùy chọn) để AI dịch chính xác hơn:", font=("Arial", 10), bg="white", fg="#555555").pack(anchor=tk.W)
-        self.context_text = tk.Text(ctx_frame, height=3, wrap=tk.WORD, font=("Arial", 10))
-        self.context_text.pack(fill=tk.X)
-        ai_btn_frame = tk.Frame(ctx_frame, bg="white")
-        ai_btn_frame.pack(fill=tk.X, pady=(6, 0))
-        self.ai_translate_btn = tk.Button(ai_btn_frame, text="🤖 AI dịch theo ngữ cảnh", font=("Arial", 10, "bold"), bg="#0D47A1", fg="white", relief=tk.FLAT, padx=12, pady=6, cursor="hand2", command=self.run_ai_translate_current)
-        if self.gemini_enabled:
-            self.ai_translate_btn.pack(side=tk.LEFT)
-        else:
-            self.ai_translate_btn.configure(state=tk.DISABLED)
-
-        # AI status label
-        self.ai_status_var = tk.StringVar(value="")
-        self.ai_status_label = tk.Label(
-            ai_btn_frame,
-            textvariable=self.ai_status_var,
-            font=("Arial", 10),
-            bg="white",
-            fg="#666666"
-        )
-        self.ai_status_label.pack(side=tk.LEFT, padx=(10, 0))
-
-        # Debounce for context changes
-        self._ai_ctx_after_id = None
-        def _on_ctx_key_release(event):
-            if not self.gemini_enabled or not hasattr(self, 'current_word_info'):
-                return
-            if self._ai_ctx_after_id:
-                try:
-                    self.root.after_cancel(self._ai_ctx_after_id)
-                except Exception:
-                    pass
-            self._ai_ctx_after_id = self.root.after(700, self.run_ai_translate_current)
-        self.context_text.bind('<KeyRelease>', _on_ctx_key_release)
-        
-        # Main Content
-        main_frame = tk.Frame(self.root, bg="white")
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=(0, 20))
-        
-        self.result_canvas = tk.Canvas(main_frame, bg="white", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.result_canvas.yview)
-        self.scrollable_frame = tk.Frame(self.result_canvas, bg="white")
+        # Canvas for scrolling
+        self.result_canvas = tk.Canvas(self.content_frame, bg=self.colors['white'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content_frame, orient="vertical", command=self.result_canvas.yview)
+        self.scrollable_frame = tk.Frame(self.result_canvas, bg=self.colors['white'])
         
         self.scrollable_frame.bind(
             "<Configure>",
@@ -299,7 +334,102 @@ class CambridgeDictionaryApp:
         
         self.result_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         
-        self.show_welcome()
+    def create_new_tab(self, word="New Tab"):
+        """Create a new tab"""
+        self.tab_counter += 1
+        tab_id = f"tab_{self.tab_counter}"
+        
+        # Create tab button
+        tab_btn = tk.Button(
+            self.tab_container,
+            text=f"📄 {word}",
+            font=("Segoe UI", 10),
+            bg=self.colors['border'],
+            fg=self.colors['dark'],
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=lambda: self.switch_tab(tab_id)
+        )
+        tab_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        # Close button for tab
+        close_btn = tk.Button(
+            self.tab_container,
+            text="✕",
+            font=("Segoe UI", 8, "bold"),
+            bg=self.colors['danger'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=5,
+            pady=5,
+            cursor="hand2",
+            command=lambda: self.close_tab(tab_id)
+        )
+        close_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Store tab info
+        self.tabs[tab_id] = {
+            'button': tab_btn,
+            'close_btn': close_btn,
+            'word': word,
+            'content': None
+        }
+        
+        # Switch to new tab
+        self.switch_tab(tab_id)
+        
+        return tab_id
+        
+    def switch_tab(self, tab_id):
+        """Switch to a specific tab"""
+        if tab_id not in self.tabs:
+            return
+            
+        # Update button styles
+        for tid, tab_info in self.tabs.items():
+            if tid == tab_id:
+                tab_info['button'].configure(bg=self.colors['secondary'], fg=self.colors['white'])
+                self.current_tab = tid
+            else:
+                tab_info['button'].configure(bg=self.colors['border'], fg=self.colors['dark'])
+        
+        # Clear current content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+            
+        # Load tab content if exists
+        if self.tabs[tab_id]['content']:
+            self.load_tab_content(tab_id)
+        else:
+            self.show_welcome()
+            
+    def close_tab(self, tab_id):
+        """Close a tab"""
+        if tab_id not in self.tabs or len(self.tabs) <= 1:
+            return
+            
+        # Remove tab buttons
+        self.tabs[tab_id]['button'].destroy()
+        self.tabs[tab_id]['close_btn'].destroy()
+        
+        # Remove from tabs dict
+        del self.tabs[tab_id]
+        
+        # Switch to another tab
+        if self.current_tab == tab_id:
+            remaining_tabs = list(self.tabs.keys())
+            if remaining_tabs:
+                self.switch_tab(remaining_tabs[0])
+                
+    def load_tab_content(self, tab_id):
+        """Load content for a specific tab"""
+        if tab_id not in self.tabs or not self.tabs[tab_id]['content']:
+            return
+            
+        content = self.tabs[tab_id]['content']
+        self._display_results(content)
         
     def _on_mousewheel(self, event):
         self.result_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
@@ -308,26 +438,68 @@ class CambridgeDictionaryApp:
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
         
-        welcome_frame = tk.Frame(self.scrollable_frame, bg="white")
+        welcome_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
         welcome_frame.pack(pady=100)
+        
+        # Welcome icon
+        icon_label = tk.Label(
+            welcome_frame,
+            text="📚",
+            font=("Segoe UI", 60),
+            bg=self.colors['white'],
+            fg=self.colors['secondary']
+        )
+        icon_label.pack(pady=20)
         
         welcome_label = tk.Label(
             welcome_frame,
-            text="👋 Welcome to Cambridge Dictionary",
-            font=("Arial", 20, "bold"),
-            bg="white",
-            fg="#002147"
+            text="Welcome to Cambridge Dictionary",
+            font=("Segoe UI", 24, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['primary']
         )
         welcome_label.pack(pady=10)
         
+        subtitle_label = tk.Label(
+            welcome_frame,
+            text="AI Enhanced Edition",
+            font=("Segoe UI", 14),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
+        )
+        subtitle_label.pack(pady=5)
+        
         instruction_label = tk.Label(
             welcome_frame,
-            text="Enter a word to search...",
-            font=("Arial", 14),
-            bg="white",
-            fg="#666666"
+            text="Enter a word above to search and create a new tab",
+            font=("Segoe UI", 12),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
         )
-        instruction_label.pack()
+        instruction_label.pack(pady=20)
+        
+        # Features
+        features_frame = tk.Frame(welcome_frame, bg=self.colors['white'])
+        features_frame.pack(pady=20)
+        
+        features = [
+            "🔍 Cambridge Dictionary definitions",
+            "🤖 AI-powered Vietnamese translation",
+            "🔊 UK/US pronunciation",
+            "📚 Vocabulary management",
+            "📥 Excel export for Quizlet"
+        ]
+        
+        for feature in features:
+            feature_label = tk.Label(
+                features_frame,
+                text=feature,
+                font=("Segoe UI", 11),
+                bg=self.colors['white'],
+                fg=self.colors['dark'],
+                anchor="w"
+            )
+            feature_label.pack(pady=2, padx=50)
         
     def clear_results(self):
         for widget in self.scrollable_frame.winfo_children():
@@ -391,6 +563,12 @@ class CambridgeDictionaryApp:
             messagebox.showwarning("Warning", "Please enter a word!")
             return
         
+        # Create new tab for this word
+        tab_id = self.create_new_tab(word)
+        
+        # Clear search entry
+        self.word_entry.delete(0, tk.END)
+        
         # Kiểm tra word cache
         if word.lower() in self.word_cache:
             print(f"⚡ Loading from cache: {word}")
@@ -400,16 +578,26 @@ class CambridgeDictionaryApp:
         self.clear_results()
         loading_label = tk.Label(
             self.scrollable_frame,
-            text=f"Searching for '{word}'...",
-            font=("Arial", 14),
-            bg="white",
-            fg="#666666"
+            text=f"🔍 Searching for '{word}'...",
+            font=("Segoe UI", 16),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
         )
         loading_label.pack(pady=50)
         
-        threading.Thread(target=self._search_word_thread, args=(word,), daemon=True).start()
+        # Add loading animation
+        loading_dots = tk.Label(
+            self.scrollable_frame,
+            text="⏳",
+            font=("Segoe UI", 20),
+            bg=self.colors['white'],
+            fg=self.colors['secondary']
+        )
+        loading_dots.pack()
+        
+        threading.Thread(target=self._search_word_thread, args=(word, tab_id), daemon=True).start()
     
-    def _search_word_thread(self, word):
+    def _search_word_thread(self, word, tab_id):
         start_time = time.time()
         word_info = self.get_word_info(word)
         elapsed = time.time() - start_time
@@ -427,6 +615,13 @@ class CambridgeDictionaryApp:
             self.search_history.insert(0, word.lower())
             if len(self.search_history) > 50:  # Giữ tối đa 50 từ
                 self.search_history.pop()
+        
+        # Store content in tab
+        self.tabs[tab_id]['content'] = word_info
+        self.tabs[tab_id]['word'] = word
+        
+        # Update tab button text
+        self.tabs[tab_id]['button'].configure(text=f"📄 {word}")
         
         self.root.after(0, lambda: self._display_results(word_info))
     
@@ -739,39 +934,52 @@ class CambridgeDictionaryApp:
         hint_label.pack()
     
     def _display_results(self, word_info):
-        """Hiển thị kết quả - HIỂN THỊ NGAY, DỊCH SAU"""
+        """Hiển thị kết quả với giao diện đẹp"""
         self.current_word_info = word_info
         self.clear_results()
         
-        content_frame = tk.Frame(self.scrollable_frame, bg="white")
+        content_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
         content_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=20)
         
         # Word Title với nghĩa tiếng Việt
-        title_frame = tk.Frame(content_frame, bg="white")
+        title_frame = tk.Frame(content_frame, bg=self.colors['white'])
         title_frame.pack(anchor=tk.W, pady=(0, 15))
         
-        word_title = tk.Label(title_frame, text=word_info['word'].upper(), font=("Georgia", 30, "bold"), bg="white", fg="#002147")
+        word_title = tk.Label(
+            title_frame, 
+            text=word_info['word'].upper(), 
+            font=("Segoe UI", 32, "bold"), 
+            bg=self.colors['white'], 
+            fg=self.colors['primary']
+        )
         word_title.pack(side=tk.LEFT)
-        # Placeholder AI VI label
-        self.ai_vi_label = tk.Label(title_frame, text=(f"  •  {word_info['word_meaning_vi']}" if word_info.get('word_meaning_vi') else ""), font=("Arial", 16), bg="white", fg="#0D47A1")
-        self.ai_vi_label.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # AI Vietnamese meaning
+        self.ai_vi_label = tk.Label(
+            title_frame, 
+            text=(f"  •  {word_info['word_meaning_vi']}" if word_info.get('word_meaning_vi') else ""), 
+            font=("Segoe UI", 18), 
+            bg=self.colors['white'], 
+            fg=self.colors['secondary']
+        )
+        self.ai_vi_label.pack(side=tk.LEFT, padx=(15, 0))
         
         # Pronunciation
-        pron_frame = tk.Frame(content_frame, bg="white")
+        pron_frame = tk.Frame(content_frame, bg=self.colors['white'])
         pron_frame.pack(anchor=tk.W, pady=(0, 20))
         
         if word_info['phonetic_uk']:
-            uk_frame = tk.Frame(pron_frame, bg="white")
+            uk_frame = tk.Frame(pron_frame, bg=self.colors['white'])
             uk_frame.pack(side=tk.LEFT, padx=(0, 30))
             
-            tk.Label(uk_frame, text="UK", font=("Arial", 10, "bold"), bg="white", fg="#666666").pack(side=tk.LEFT, padx=(0, 8))
+            tk.Label(uk_frame, text="UK", font=("Segoe UI", 11, "bold"), bg=self.colors['white'], fg=self.colors['dark']).pack(side=tk.LEFT, padx=(0, 8))
             
             tk.Button(
                 uk_frame,
                 text="🔊",
-                font=("Arial", 16),
-                bg="white",
-                fg="#00A7E1",
+                font=("Segoe UI", 18),
+                bg=self.colors['white'],
+                fg=self.colors['secondary'],
                 relief=tk.FLAT,
                 cursor="hand2",
                 borderwidth=0,
@@ -781,33 +989,34 @@ class CambridgeDictionaryApp:
             uk_ipa_label = tk.Label(
                 uk_frame,
                 text=f"/{word_info['phonetic_uk']}/",
-                font=("Arial", 14),
-                bg="white",
-                fg="#E74C3C"
+                font=("Segoe UI", 16),
+                bg=self.colors['white'],
+                fg=self.colors['danger']
             )
             uk_ipa_label.pack(side=tk.LEFT, padx=(8, 4))
             tk.Button(
                 uk_frame,
                 text="Copy",
-                font=("Arial", 9),
-                bg="#F5F5F5",
+                font=("Segoe UI", 9),
+                bg=self.colors['light'],
+                fg=self.colors['dark'],
                 relief=tk.SOLID,
                 borderwidth=1,
                 command=lambda t=uk_ipa_label.cget('text'): self.copy_to_clipboard(t)
             ).pack(side=tk.LEFT)
         
         if word_info['phonetic_us']:
-            us_frame = tk.Frame(pron_frame, bg="white")
+            us_frame = tk.Frame(pron_frame, bg=self.colors['white'])
             us_frame.pack(side=tk.LEFT)
             
-            tk.Label(us_frame, text="US", font=("Arial", 10, "bold"), bg="white", fg="#666666").pack(side=tk.LEFT, padx=(0, 8))
+            tk.Label(us_frame, text="US", font=("Segoe UI", 11, "bold"), bg=self.colors['white'], fg=self.colors['dark']).pack(side=tk.LEFT, padx=(0, 8))
             
             tk.Button(
                 us_frame,
                 text="🔊",
-                font=("Arial", 16),
-                bg="white",
-                fg="#00A7E1",
+                font=("Segoe UI", 18),
+                bg=self.colors['white'],
+                fg=self.colors['secondary'],
                 relief=tk.FLAT,
                 cursor="hand2",
                 borderwidth=0,
@@ -817,23 +1026,42 @@ class CambridgeDictionaryApp:
             us_ipa_label = tk.Label(
                 us_frame,
                 text=f"/{word_info['phonetic_us']}/",
-                font=("Arial", 14),
-                bg="white",
-                fg="#E74C3C"
+                font=("Segoe UI", 16),
+                bg=self.colors['white'],
+                fg=self.colors['danger']
             )
             us_ipa_label.pack(side=tk.LEFT, padx=(8, 4))
             tk.Button(
                 us_frame,
                 text="Copy",
-                font=("Arial", 9),
-                bg="#F5F5F5",
+                font=("Segoe UI", 9),
+                bg=self.colors['light'],
+                fg=self.colors['dark'],
                 relief=tk.SOLID,
                 borderwidth=1,
                 command=lambda t=us_ipa_label.cget('text'): self.copy_to_clipboard(t)
             ).pack(side=tk.LEFT)
         
         # Separator
-        tk.Frame(content_frame, height=2, bg="#E0E0E0").pack(fill=tk.X, pady=15)
+        tk.Frame(content_frame, height=2, bg=self.colors['border']).pack(fill=tk.X, pady=15)
+        
+        # Action buttons
+        action_frame = tk.Frame(content_frame, bg=self.colors['white'])
+        action_frame.pack(anchor=tk.W, pady=(0, 20))
+        
+        add_vocab_btn = tk.Button(
+            action_frame,
+            text="📚 Add to Vocabulary",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['accent'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=20,
+            pady=8,
+            cursor="hand2",
+            command=self.add_current_word
+        )
+        add_vocab_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         # Definitions
         for idx, definition in enumerate(word_info['definitions'], 1):
@@ -851,70 +1079,72 @@ class CambridgeDictionaryApp:
             print(f"Copy failed: {e}")
     
     def _display_definition(self, parent, idx, definition):
-        """Hiển thị định nghĩa với nghĩa tiếng Việt"""
-        def_container = tk.Frame(parent, bg="white")
+        """Hiển thị định nghĩa với giao diện đẹp"""
+        def_container = tk.Frame(parent, bg=self.colors['white'])
         def_container.pack(fill=tk.X, pady=15, anchor=tk.W)
         
         # Part of speech
         if definition['pos']:
-            tk.Label(
+            pos_label = tk.Label(
                 def_container,
                 text=definition['pos'],
-                font=("Arial", 13, "bold"),
-                bg="white",
-                fg="#0D47A1"  # Màu xanh Cambridge
-            ).pack(anchor=tk.W, pady=(0, 10))
+                font=("Segoe UI", 14, "bold"),
+                bg=self.colors['white'],
+                fg=self.colors['primary']
+            )
+            pos_label.pack(anchor=tk.W, pady=(0, 10))
         
         # Definition row
-        def_row = tk.Frame(def_container, bg="white")
+        def_row = tk.Frame(def_container, bg=self.colors['white'])
         def_row.pack(fill=tk.X, pady=(0, 10))
         
         # Left: English
-        left_frame = tk.Frame(def_row, bg="white")
+        left_frame = tk.Frame(def_row, bg=self.colors['white'])
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 20))
         
-        en_def_frame = tk.Frame(left_frame, bg="white")
+        en_def_frame = tk.Frame(left_frame, bg=self.colors['white'])
         en_def_frame.pack(fill=tk.X)
         
         tk.Label(
             en_def_frame,
             text=f"{idx}.",
-            font=("Arial", 12, "bold"),
-            bg="white",
-            fg="#002147"
+            font=("Segoe UI", 14, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['primary']
         ).pack(side=tk.LEFT, anchor=tk.N, padx=(0, 8))
         
         def_text_label = tk.Label(
             en_def_frame,
             text=definition['definition'],
-            font=("Arial", 12),
-            bg="white",
-            fg="#002147",
-            wraplength=350,
+            font=("Segoe UI", 13),
+            bg=self.colors['white'],
+            fg=self.colors['dark'],
+            wraplength=400,
             justify=tk.LEFT
         )
         def_text_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(
             en_def_frame,
             text="Copy",
-            font=("Arial", 9),
-            bg="#F5F5F5",
+            font=("Segoe UI", 9),
+            bg=self.colors['light'],
+            fg=self.colors['dark'],
             relief=tk.SOLID,
             borderwidth=1,
             command=lambda t=definition['definition']: self.copy_to_clipboard(t)
         ).pack(side=tk.LEFT, padx=(6, 0))
         
         # Right: Vietnamese - PLACEHOLDER trước, cập nhật sau
-        right_frame = tk.Frame(def_row, bg="#F0F4FF", relief=tk.SOLID, borderwidth=1)
+        right_frame = tk.Frame(def_row, bg=self.colors['light'], relief=tk.SOLID, borderwidth=1)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH)
         
         vi_label = tk.Label(
             right_frame,
             text="🇻🇳  Đang dịch...",
-            font=("Arial", 11),
-            bg="#F0F4FF",
-            fg="#1565C0",  # Xanh Cambridge đậm hơn
-            wraplength=280,
+            font=("Segoe UI", 12),
+            bg=self.colors['light'],
+            fg=self.colors['secondary'],
+            wraplength=300,
             justify=tk.LEFT,
             padx=12,
             pady=8
@@ -931,24 +1161,25 @@ class CambridgeDictionaryApp:
         # Examples
         if definition['examples']:
             for ex in definition['examples']:
-                ex_frame = tk.Frame(left_frame, bg="white")
+                ex_frame = tk.Frame(left_frame, bg=self.colors['white'])
                 ex_frame.pack(fill=tk.X, pady=(5, 0), padx=(25, 0))
                 
                 ex_text_label = tk.Label(
                     ex_frame,
                     text=f"• {ex}",
-                    font=("Arial", 11, "italic"),
-                    bg="white",
-                    fg="#666666",
-                    wraplength=320,
+                    font=("Segoe UI", 12, "italic"),
+                    bg=self.colors['white'],
+                    fg=self.colors['dark'],
+                    wraplength=400,
                     justify=tk.LEFT
                 )
                 ex_text_label.pack(side=tk.LEFT, anchor=tk.W)
                 tk.Button(
                     ex_frame,
                     text="Copy",
-                    font=("Arial", 9),
-                    bg="#F5F5F5",
+                    font=("Segoe UI", 9),
+                    bg=self.colors['light'],
+                    fg=self.colors['dark'],
                     relief=tk.SOLID,
                     borderwidth=1,
                     command=lambda t=ex: self.copy_to_clipboard(t)
@@ -958,10 +1189,10 @@ class CambridgeDictionaryApp:
                 vi_ex_label = tk.Label(
                     ex_frame,
                     text="  ...",
-                    font=("Arial", 10),
-                    bg="white",
-                    fg="#1976D2",  # Xanh Cambridge
-                    wraplength=320,
+                    font=("Segoe UI", 11),
+                    bg=self.colors['white'],
+                    fg=self.colors['secondary'],
+                    wraplength=400,
                     justify=tk.LEFT
                 )
                 vi_ex_label.pack(anchor=tk.W, pady=(2, 0))
