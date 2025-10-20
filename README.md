@@ -11,7 +11,7 @@
 - 🔍 **Tra từ từ Cambridge Dictionary**
 - 🎯 **Autocomplete thông minh** - 4795+ từ phổ biến
 - 🔊 **Phát âm UK/US** - Audio từ Cambridge
-- 🇻🇳 **Dịch tiếng Việt** - Tự động, hiện ngay bên từ
+- 🤖 **AI Dịch tiếng Việt** - Gemini 2.0 Flash, dịch theo ngữ cảnh
 - 📚 **Ghi nhớ từ vựng** - Lưu và quản lý từ đã học
 - 📥 **Export Excel** - Import trực tiếp vào Quizlet
 - ⚡ **Cache thông minh** - Tra lần 2 cực nhanh (<0.1s)
@@ -91,7 +91,7 @@ pyinstaller --name="Cambridge Dictionary" \
 
 - **GUI**: Tkinter
 - **Web scraping**: BeautifulSoup4 + lxml
-- **Translation**: Google Translate API (deep-translator)
+- **Translation**: AI (Gemini 2.0 Flash) + Google Translate API (deep-translator)
 - **TTS**: pyttsx3 (fallback) + Cambridge audio
 - **Audio**: pygame
 - **Excel**: openpyxl
@@ -122,8 +122,21 @@ MIT License - Tự do sử dụng cho mục đích cá nhân và thương mại.
 ## 🙏 Credits
 
 - **Dictionary API**: Cambridge Dictionary
-- **Translation**: Google Translate
+- **Translation**: AI (Gemini 2.0 Flash) + Google Translate (fallback)
 - **Inspiration**: Cambridge Dictionary website
+
+## ☕ Hỗ trợ phát triển
+
+Ứng dụng này sử dụng **AI Gemini 2.0 Flash** để cung cấp bản dịch tiếng Việt chất lượng cao và theo ngữ cảnh. Nếu bạn thấy ứng dụng hữu ích và muốn ủng hộ tác giả, bạn có thể "mua một ly cà phê" qua thông tin sau:
+
+**💳 Thông tin chuyển khoản:**
+- **Ngân hàng**: MB Bank (Military Bank)
+- **Số tài khoản**: `0396202885`
+- **Chủ tài khoản**: **Nguyễn Ngọc Thoại**
+
+![Mã QR Donate](donate_qr.png)
+
+*Quét mã QR để chuyển khoản nhanh chóng*
 
 ## 📧 Liên hệ
 
