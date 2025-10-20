@@ -1284,27 +1284,38 @@ class CambridgeDictionaryApp:
                 threading.Thread(target=self._pronounce_thread, args=(word,), daemon=True).start()
     
     def _play_cambridge_audio(self, audio_url):
-        """Phát audio từ Cambridge"""
+        """Phát audio Cambridge trực tiếp trong app với pygame"""
         try:
             import pygame
             import io
             
-            # Download audio
-            response = self.session.get(audio_url, timeout=6)
-            audio_data = io.BytesIO(response.content)
+            print(f"🔊 Playing Cambridge audio: {audio_url}")
             
-            # Play audio
-            pygame.mixer.init()
-            pygame.mixer.music.load(audio_data)
-            pygame.mixer.music.play()
-            
-            # Đợi phát xong
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
+            # Download audio từ Cambridge
+            response = self.session.get(audio_url, timeout=5)
+            if response.status_code == 200:
+                audio_data = io.BytesIO(response.content)
+                
+                # Phát audio bằng pygame
+                pygame.mixer.init()
+                pygame.mixer.music.load(audio_data)
+                pygame.mixer.music.play()
+                
+                # Đợi phát xong
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
+                    
+            else:
+                print(f"❌ Cambridge audio failed: {response.status_code}")
+                # Fallback sang TTS
+                if self.tts_engine and hasattr(self, 'current_word_info') and self.current_word_info:
+                    threading.Thread(target=self._pronounce_thread, args=(self.current_word_info['word'],), daemon=True).start()
                 
         except Exception as e:
-            print(f"Error playing audio: {e}")
+            print(f"Error playing Cambridge audio: {e}")
             # Fallback sang TTS nếu lỗi
+            if self.tts_engine and hasattr(self, 'current_word_info') and self.current_word_info:
+                threading.Thread(target=self._pronounce_thread, args=(self.current_word_info['word'],), daemon=True).start()
     
     def _pronounce_thread(self, word):
         """Fallback TTS"""
