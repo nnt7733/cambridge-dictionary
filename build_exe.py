@@ -21,4 +21,4 @@ PyInstaller.__main__.run([
     '--hidden-import=win32com.client',
 ])
 
-print(f"\n✅ Build completed: {os.path.dirname(os.path.abspath(__file__))}\\dist\\EnglishVietnameseDictionary.exe")
+print(f"\nBuild completed: {os.path.dirname(os.path.abspath(__file__))}\\dist\\EnglishVietnameseDictionary.exe")
