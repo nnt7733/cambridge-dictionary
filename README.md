@@ -63,7 +63,8 @@ python dictionary_gui.py
 ## 📧 Liên hệ
 
 - **Issues**: [GitHub Issues](../../issues)
-- **Email**: Tạo issue trên GitHub
+- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
+- **License**: [MIT License](LICENSE)
 
 ---
 
