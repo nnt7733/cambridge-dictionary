@@ -34,9 +34,9 @@ class CambridgeDictionaryApp:
         if self.gemini_api_key:
             try:
                 genai.configure(api_key=self.gemini_api_key)
-                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
                 self.gemini_enabled = True
-                print("[Gemini] Initialized successfully with gemini-2.0-flash-exp")
+                print("[Gemini] Initialized successfully with gemini-2.0-flash")
             except Exception as e:
                 print(f"[Gemini] Failed to initialize: {e}")
                 self.gemini_enabled = False
@@ -995,7 +995,7 @@ class CambridgeDictionaryApp:
                         self.ai_vi_label.config(text=f"  •  {vi}")
                         self.ai_status_var.set("Hoàn tất")
                     else:
-                        self.ai_status_var.set("AI không trả kết quả")
+                        self.ai_status_var.set("AI không trả kết quả - Kiểm tra console")
                     self.ai_translate_btn.configure(state=tk.NORMAL, text="🤖 AI dịch theo ngữ cảnh")
                 except Exception:
                     pass
@@ -1187,6 +1187,9 @@ class CambridgeDictionaryApp:
                 
                 # Cột B: Nghĩa tiếng Việt - ưu tiên ai_vi nếu có
                 meaning_vi = item.get('ai_vi') or self.translate_text(word)
+                # Thêm dấu chấm phẩy ở cuối nghĩa tiếng Việt
+                if meaning_vi and not meaning_vi.endswith(';'):
+                    meaning_vi += ';'
                 
                 ws[f'A{row}'] = cell_a_text
                 ws[f'B{row}'] = meaning_vi
