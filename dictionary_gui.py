@@ -15,7 +15,8 @@ import bisect
 import hashlib
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
+from io import StringIO
 
 
 def load_environment():
@@ -50,6 +51,30 @@ def load_environment():
                 if load_result:
                     loaded = True
                     print(f"[Env] Loaded .env from {env_path}")
+                else:
+                    # Khi file .env sử dụng encoding khác UTF-8 (ví dụ UTF-16) thì
+                    # load_dotenv trả về False mà không raise exception. Thử parse
+                    # thủ công với một vài encoding phổ biến để tránh lỗi khi đóng gói.
+                    raw_bytes = env_path.read_bytes()
+                    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be"):
+                        try:
+                            content = raw_bytes.decode(encoding)
+                        except UnicodeDecodeError:
+                            continue
+                        values = dotenv_values(stream=StringIO(content))
+                        if values:
+                            for key, value in values.items():
+                                if value is None:
+                                    continue
+                                if not loaded or key not in os.environ:
+                                    os.environ[key] = value
+                            loaded = True
+                            print(
+                                f"[Env] Loaded .env from {env_path} using fallback encoding {encoding}"
+                            )
+                            break
+        except UnicodeDecodeError as e:
+            print(f"[Env] Could not decode {env_path}: {e}")
         except Exception as e:
             print(f"[Env] Could not load {env_path}: {e}")
 
