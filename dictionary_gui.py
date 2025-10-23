@@ -83,7 +83,7 @@ def load_environment():
         load_dotenv()
 
 
-load_environment()
+# load_environment()  # Disabled to avoid .env encoding issues
 
 class CambridgeDictionaryApp:
     def __init__(self, root):
@@ -103,8 +103,8 @@ class CambridgeDictionaryApp:
         
         # Translator với retry logic
         self.translator = GoogleTranslator(source='en', target='vi')
-        # Gemini context-aware
-        self.gemini_api_key = (os.getenv('GEMINI_API_KEY') or '').strip()
+        # Gemini context-aware - Hardcoded API key
+        self.gemini_api_key = 'AIzaSyCz0JtTfcbSjhQ54wux1QPHvQGDGCjbzmw'
         self.gemini_enabled = False
         if self.gemini_api_key:
             try:
