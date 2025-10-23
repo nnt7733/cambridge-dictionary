@@ -16,6 +16,8 @@ dist/
 # App data
 translation_cache.json
 my_vocabulary.json
+audio_cache/
+.env
 
 # IDE
 .vscode/

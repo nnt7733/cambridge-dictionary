@@ -12,6 +12,11 @@ from datetime import datetime
 import time
 import sys
 import bisect
+import hashlib
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class CambridgeDictionaryApp:
     def __init__(self, root):
@@ -37,7 +42,7 @@ class CambridgeDictionaryApp:
         # Translator với retry logic
         self.translator = GoogleTranslator(source='en', target='vi')
         # Gemini context-aware
-        self.gemini_api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyCz0JtTfcbSjhQ54wux1QPHvQGDGCjbzmw').strip()
+        self.gemini_api_key = (os.getenv('GEMINI_API_KEY') or '').strip()
         self.gemini_enabled = False
         if self.gemini_api_key:
             try:
@@ -48,10 +53,20 @@ class CambridgeDictionaryApp:
             except Exception as e:
                 print(f"[Gemini] Failed to initialize: {e}")
                 self.gemini_enabled = False
-        
+        else:
+            print("[Gemini] API key not found. Set GEMINI_API_KEY to enable AI features.")
+
         # Cache để tăng tốc EXTREME
         self.translation_cache = {}
         self.word_cache = {}  # Cache cả từ đã tra
+
+        # Audio cache
+        self.audio_cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio_cache')
+        try:
+            os.makedirs(self.audio_cache_dir, exist_ok=True)
+        except Exception as e:
+            print(f"[Audio Cache] Could not create cache directory: {e}")
+            self.audio_cache_dir = None
         
         # File lưu từ vựng
         self.vocab_file = "my_vocabulary.json"
@@ -510,35 +525,93 @@ class CambridgeDictionaryApp:
         # Kiểm tra cache trước
         if text in self.translation_cache:
             return self.translation_cache[text]
-        
+
         # Ưu tiên dùng AI nếu enabled
+        vi_text = None
         if self.gemini_enabled:
             try:
                 vi_text = self.ai_translate_simple(text)
-                if vi_text:
-                    self.translation_cache[text] = vi_text
-                    if len(self.translation_cache) % 10 == 0:
-                        self.save_cache()
-                    return vi_text
             except Exception as e:
                 print(f"[AI Translate] Error: {e}")
-        
-        # Fallback: Google Translate
+
+        if not vi_text:
+            vi_text = self._google_translate_text(text)
+
+        if vi_text:
+            self.translation_cache[text] = vi_text
+            if len(self.translation_cache) % 10 == 0:
+                self.save_cache()
+            return vi_text
+
+        return text
+
+    def _run_batch_translation(self, translation_targets):
+        def worker():
+            self._process_batch_translations(translation_targets)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _process_batch_translations(self, translation_targets):
+        pending_items = [t for t in translation_targets if t.get('text')]
+        if not pending_items:
+            return
+
+        resolved = {}
+        uncached_texts = []
+
+        for item in pending_items:
+            text = item['text']
+            if text in self.translation_cache:
+                resolved[text] = self.translation_cache[text]
+            else:
+                uncached_texts.append(text)
+
+        unique_uncached = list(dict.fromkeys(uncached_texts))
+        ai_results = {}
+
+        if unique_uncached and self.gemini_enabled:
+            try:
+                ai_results = self.ai_translate_batch(unique_uncached)
+            except Exception as e:
+                print(f"[AI Batch] Error: {e}")
+
+        for text, translation in ai_results.items():
+            if translation:
+                resolved[text] = translation
+                self.translation_cache[text] = translation
+
+        remaining = [t for t in unique_uncached if t not in resolved]
+        for text in remaining:
+            translation = self._google_translate_text(text)
+            if translation:
+                resolved[text] = translation
+                self.translation_cache[text] = translation
+
+        if self.translation_cache and len(self.translation_cache) % 10 == 0:
+            self.save_cache()
+
+        for item in pending_items:
+            text = item['text']
+            label = item['label']
+            prefix = item.get('prefix', '')
+            translation = resolved.get(text)
+            if not translation:
+                translation = text
+
+            display_text = f"{prefix}{translation}"
+            self.root.after(0, lambda lbl=label, txt=display_text: lbl.config(text=txt))
+
+    def _google_translate_text(self, text):
         for attempt in range(2):
             try:
                 translation = self.translator.translate(text)
-                self.translation_cache[text] = translation
-                if len(self.translation_cache) % 10 == 0:
-                    self.save_cache()
                 return translation
             except Exception as e:
                 if attempt == 0:
                     time.sleep(0.5)
                     continue
-                else:
-                    return f"[{text}]"
-        
-        return text
+                print(f"[Google Translate] Error: {e}")
+        return None
     
     def ai_translate_simple(self, text: str) -> str:
         """Dịch đơn giản EN->VI bằng AI"""
@@ -555,6 +628,50 @@ class CambridgeDictionaryApp:
         except Exception as e:
             print(f"[AI Simple] Error: {e}")
             return None
+
+    def ai_translate_batch(self, texts):
+        """Dịch nhiều đoạn văn bản trong một lần gọi AI"""
+        if not texts:
+            return {}
+
+        # Loại bỏ trùng lặp nhưng giữ thứ tự
+        unique_texts = list(dict.fromkeys(texts))
+        payload = json.dumps(unique_texts, ensure_ascii=False)
+        prompt = (
+            "Translate each English string in the JSON array below to Vietnamese. "
+            "Respond ONLY with a JSON array of translations, keeping the order identical to the input.\n\n"
+            f"Input:\n{payload}\n\nOutput:\n"
+        )
+
+        try:
+            resp = self.gemini_model.generate_content(prompt)
+            raw_text = (getattr(resp, 'text', None) or '').strip()
+
+            if raw_text.startswith('```'):
+                parts = raw_text.split('```')
+                for part in parts:
+                    if part.strip().startswith('{') or part.strip().startswith('['):
+                        raw_text = part.strip()
+                        break
+
+            import re as _re
+
+            match = _re.search(r"\[[\s\S]*\]", raw_text)
+            if match:
+                raw_text = match.group(0)
+
+            translations = json.loads(raw_text)
+            if not isinstance(translations, list):
+                return {}
+
+            result = {}
+            for original, translated in zip(unique_texts, translations):
+                if isinstance(translated, str) and translated.strip():
+                    result[original] = translated.strip().strip('"').strip("'")
+            return result
+        except Exception as e:
+            print(f"[AI Batch] Parse error: {e}")
+            return {}
     
     def search_word(self):
         word = self.word_entry.get().strip()
@@ -1064,8 +1181,11 @@ class CambridgeDictionaryApp:
         add_vocab_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         # Definitions
+        translation_targets = []
         for idx, definition in enumerate(word_info['definitions'], 1):
-            self._display_definition(content_frame, idx, definition)
+            self._display_definition(content_frame, idx, definition, translation_targets)
+        if translation_targets:
+            self._run_batch_translation(translation_targets)
         # Auto AI translate if available
         if self.gemini_enabled:
             self.root.after(120, self.run_ai_translate_current)
@@ -1078,7 +1198,7 @@ class CambridgeDictionaryApp:
         except Exception as e:
             print(f"Copy failed: {e}")
     
-    def _display_definition(self, parent, idx, definition):
+    def _display_definition(self, parent, idx, definition, translation_targets):
         """Hiển thị định nghĩa với giao diện đẹp"""
         def_container = tk.Frame(parent, bg=self.colors['white'])
         def_container.pack(fill=tk.X, pady=15, anchor=tk.W)
@@ -1137,7 +1257,7 @@ class CambridgeDictionaryApp:
         # Right: Vietnamese - PLACEHOLDER trước, cập nhật sau
         right_frame = tk.Frame(def_row, bg=self.colors['light'], relief=tk.SOLID, borderwidth=1)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH)
-        
+
         vi_label = tk.Label(
             right_frame,
             text="🇻🇳  Đang dịch...",
@@ -1150,13 +1270,12 @@ class CambridgeDictionaryApp:
             pady=8
         )
         vi_label.pack()
-        
-        # Dịch và cập nhật trong background
-        def update_translation():
-            vi_def = self.translate_text(definition['definition'])
-            vi_label.config(text=f"🇻🇳  {vi_def}")
-        
-        threading.Thread(target=update_translation, daemon=True).start()
+
+        translation_targets.append({
+            'text': definition['definition'],
+            'label': vi_label,
+            'prefix': "🇻🇳  "
+        })
         
         # Examples
         if definition['examples']:
@@ -1196,13 +1315,12 @@ class CambridgeDictionaryApp:
                     justify=tk.LEFT
                 )
                 vi_ex_label.pack(anchor=tk.W, pady=(2, 0))
-                
-                # Update trong background
-                def update_ex_translation(ex_text=ex, label=vi_ex_label):
-                    vi_ex = self.translate_text(ex_text)
-                    label.config(text=f"  {vi_ex}")
-                
-                threading.Thread(target=update_ex_translation, daemon=True).start()
+
+                translation_targets.append({
+                    'text': ex,
+                    'label': vi_ex_label,
+                    'prefix': "  "
+                })
 
     def run_ai_translate_current(self):
         if not self.gemini_enabled or not hasattr(self, 'current_word_info'):
@@ -1287,30 +1405,52 @@ class CambridgeDictionaryApp:
         """Phát audio Cambridge trực tiếp trong app với pygame"""
         try:
             import pygame
-            import io
-            
+
             print(f"🔊 Playing Cambridge audio: {audio_url}")
-            
-            # Download audio từ Cambridge
-            response = self.session.get(audio_url, timeout=5)
-            if response.status_code == 200:
-                audio_data = io.BytesIO(response.content)
-                
-                # Phát audio bằng pygame
-                pygame.mixer.init()
-                pygame.mixer.music.load(audio_data)
-                pygame.mixer.music.play()
-                
-                # Đợi phát xong
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
-                    
+
+            cache_path = None
+            if self.audio_cache_dir:
+                filename = hashlib.sha256(audio_url.encode('utf-8')).hexdigest() + '.mp3'
+                cache_path = os.path.join(self.audio_cache_dir, filename)
+
+            audio_source = None
+            if cache_path and os.path.exists(cache_path):
+                audio_source = cache_path
             else:
-                print(f"❌ Cambridge audio failed: {response.status_code}")
+                response = self.session.get(audio_url, timeout=5)
+                if response.status_code == 200:
+                    if cache_path:
+                        try:
+                            with open(cache_path, 'wb') as f:
+                                f.write(response.content)
+                            audio_source = cache_path
+                        except Exception as e:
+                            print(f"[Audio Cache] Failed to write cache: {e}")
+                    if not audio_source:
+                        from io import BytesIO
+                        audio_source = BytesIO(response.content)
+                else:
+                    print(f"❌ Cambridge audio failed: {response.status_code}")
+
+            if not audio_source:
                 # Fallback sang TTS
                 if self.tts_engine and hasattr(self, 'current_word_info') and self.current_word_info:
                     threading.Thread(target=self._pronounce_thread, args=(self.current_word_info['word'],), daemon=True).start()
-                
+                return
+
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+
+            if hasattr(audio_source, 'seek'):
+                audio_source.seek(0)
+
+            pygame.mixer.music.load(audio_source)
+            pygame.mixer.music.play()
+
+            # Đợi phát xong
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+
         except Exception as e:
             print(f"Error playing Cambridge audio: {e}")
             # Fallback sang TTS nếu lỗi
