@@ -1898,26 +1898,30 @@ class CambridgeDictionaryApp:
             padx=20,
             pady=10,
             cursor="hand2",
-            command=lambda: (self.translate_input.delete("1.0", tk.END), self.translate_output.delete("1.0", tk.END))
+            command=lambda: self._clear_translator_ui()
         )
         clear_btn.pack(side=tk.LEFT, padx=(10, 0))
         
-        # Output section
+        # Output section with two columns
         output_frame = tk.Frame(translator_frame, bg=self.colors['white'])
         output_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Output label
+        # Left column - Translation
+        left_column = tk.Frame(output_frame, bg=self.colors['white'])
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Translation label
         tk.Label(
-            output_frame,
+            left_column,
             text="✅ Kết quả dịch:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
         ).pack(anchor=tk.W, pady=(0, 8))
         
-        # Output text area
+        # Translation text area
         self.translate_output = tk.Text(
-            output_frame,
+            left_column,
             height=10,
             font=("Segoe UI", 11),
             wrap=tk.WORD,
@@ -1929,6 +1933,34 @@ class CambridgeDictionaryApp:
             state=tk.DISABLED
         )
         self.translate_output.pack(fill=tk.BOTH, expand=True)
+        
+        # Right column - Vocabulary explanation
+        right_column = tk.Frame(output_frame, bg=self.colors['white'])
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Vocabulary explanation label
+        tk.Label(
+            right_column,
+            text="📚 Giải thích từ vựng:",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
+        ).pack(anchor=tk.W, pady=(0, 8))
+        
+        # Vocabulary explanation text area
+        self.vocab_explanation = tk.Text(
+            right_column,
+            height=10,
+            font=("Segoe UI", 10),
+            wrap=tk.WORD,
+            bg="#fef3c7",
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=15,
+            pady=12,
+            state=tk.DISABLED
+        )
+        self.vocab_explanation.pack(fill=tk.BOTH, expand=True)
         
         # AI status
         if not self.gemini_enabled:
@@ -1949,11 +1981,16 @@ class CambridgeDictionaryApp:
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập văn bản cần dịch!")
             return
         
-        # Clear output
+        # Clear outputs
         self.translate_output.config(state=tk.NORMAL)
         self.translate_output.delete("1.0", tk.END)
         self.translate_output.insert("1.0", "🔄 Đang dịch...\n")
         self.translate_output.config(state=tk.DISABLED)
+        
+        self.vocab_explanation.config(state=tk.NORMAL)
+        self.vocab_explanation.delete("1.0", tk.END)
+        self.vocab_explanation.insert("1.0", "🔄 Đang phân tích từ vựng...\n")
+        self.vocab_explanation.config(state=tk.DISABLED)
         self.root.update()
         
         # Run translation in background thread
@@ -1968,24 +2005,29 @@ class CambridgeDictionaryApp:
             
             # If single word, suggest using dictionary search
             if word_count == 1:
+                translation = self._translate_simple(text)
+                vocab_explanation = self._get_vocab_explanation(text)
                 self.root.after(0, lambda: self._update_translation_result(
                     f"💡 Gợi ý: Đây là 1 từ đơn. Bạn có thể tra từ điển để xem nghĩa chi tiết hơn.\n\n"
-                    f"Nghĩa: {self._translate_simple(text)}"
+                    f"Nghĩa: {translation}",
+                    vocab_explanation
                 ))
                 return
             
             # For 2+ words, translate with context using AI
             if self.gemini_enabled:
-                result = self._translate_with_gemini(text)
+                translation_result = self._translate_with_gemini(text)
+                vocab_explanation = self._get_vocab_explanation(text)
             else:
-                result = self._translate_simple(text)
+                translation_result = self._translate_simple(text)
+                vocab_explanation = self._get_vocab_explanation(text)
             
-            self.root.after(0, lambda: self._update_translation_result(result))
+            self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             
         except Exception as e:
             error_msg = f"❌ Lỗi dịch: {str(e)}"
             print(error_msg)
-            self.root.after(0, lambda: self._update_translation_result(error_msg))
+            self.root.after(0, lambda: self._update_translation_result(error_msg, "❌ Không thể phân tích từ vựng"))
     
     def _translate_with_gemini(self, text):
         """Dịch văn bản bằng Gemini AI với ngữ cảnh"""
@@ -2019,12 +2061,76 @@ Yêu cầu:
         except Exception as e:
             return f"❌ Lỗi dịch: {str(e)}"
     
-    def _update_translation_result(self, result):
+    def _update_translation_result(self, result, vocab_explanation=""):
         """Cập nhật kết quả dịch vào UI"""
         self.translate_output.config(state=tk.NORMAL)
         self.translate_output.delete("1.0", tk.END)
         self.translate_output.insert("1.0", result)
         self.translate_output.config(state=tk.DISABLED)
+        
+        # Update vocabulary explanation
+        self.vocab_explanation.config(state=tk.NORMAL)
+        self.vocab_explanation.delete("1.0", tk.END)
+        self.vocab_explanation.insert("1.0", vocab_explanation)
+        self.vocab_explanation.config(state=tk.DISABLED)
+    
+    def _get_vocab_explanation(self, text):
+        """Lấy giải thích từ vựng chi tiết bằng AI"""
+        try:
+            if not self.gemini_enabled:
+                return "⚠️ AI chưa khả dụng. Không thể phân tích từ vựng."
+            
+            # Tách từ và cụm từ quan trọng
+            words = text.split()
+            if len(words) == 1:
+                # Từ đơn
+                prompt = f"""Phân tích từ tiếng Anh "{text}" và giải thích chi tiết:
+
+1. Nghĩa chính (tiếng Việt)
+2. Từ loại (danh từ, động từ, tính từ...)
+3. Cách phát âm (nếu có)
+4. Ví dụ sử dụng ngắn gọn
+5. Từ đồng nghĩa (nếu có)
+
+Trả lời ngắn gọn, dễ hiểu:"""
+            else:
+                # Câu/đoạn văn
+                prompt = f"""Phân tích văn bản tiếng Anh sau và giải thích từng từ/cụm từ quan trọng:
+
+"{text}"
+
+Yêu cầu:
+- Tách các từ/cụm từ quan trọng
+- Giải thích nghĩa tiếng Việt của từng từ
+- Chỉ ra từ loại (danh từ, động từ, tính từ...)
+- Giải thích ngắn gọn, dễ hiểu
+- Sắp xếp theo thứ tự xuất hiện trong câu
+
+Format:
+• [từ/cụm từ]: [nghĩa tiếng Việt] ([từ loại])"""
+
+            print(f"[Vocab AI] Analyzing vocabulary for: {text[:50]}...")
+            response = self.gemini_model.generate_content(prompt)
+            explanation = response.text.strip()
+            
+            if explanation:
+                return f"🤖 AI phân tích từ vựng:\n\n{explanation}"
+            else:
+                return "❌ Không thể phân tích từ vựng"
+                
+        except Exception as e:
+            print(f"[Vocab AI] Error: {e}")
+            return f"❌ Lỗi phân tích từ vựng: {str(e)}"
+    
+    def _clear_translator_ui(self):
+        """Xóa tất cả nội dung trong UI dịch văn bản"""
+        self.translate_input.delete("1.0", tk.END)
+        self.translate_output.config(state=tk.NORMAL)
+        self.translate_output.delete("1.0", tk.END)
+        self.translate_output.config(state=tk.DISABLED)
+        self.vocab_explanation.config(state=tk.NORMAL)
+        self.vocab_explanation.delete("1.0", tk.END)
+        self.vocab_explanation.config(state=tk.DISABLED)
 
 
 def main():
