@@ -346,9 +346,88 @@ class CambridgeDictionaryApp:
         
         self.result_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         self.result_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        
+
+        # Context + AI controls area
+        context_section = tk.Frame(self.main_frame, bg=self.colors['white'])
+        context_section.pack(fill=tk.X, pady=(10, 0))
+
+        tk.Label(
+            context_section,
+            text="Ngữ cảnh (tùy chọn) cho bản dịch AI:",
+            font=("Segoe UI", 11, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
+        ).pack(anchor=tk.W)
+
+        self.context_text = tk.Text(
+            context_section,
+            height=3,
+            font=("Segoe UI", 11),
+            wrap=tk.WORD,
+            bg=self.colors['light'],
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=8,
+            pady=6
+        )
+        self.context_text.pack(fill=tk.X, pady=(4, 6))
+
+        ai_control_frame = tk.Frame(context_section, bg=self.colors['white'])
+        ai_control_frame.pack(fill=tk.X)
+
+        self.ai_status_var = tk.StringVar()
+        self.ai_status_label = tk.Label(
+            ai_control_frame,
+            textvariable=self.ai_status_var,
+            font=("Segoe UI", 10),
+            bg=self.colors['white'],
+            fg=self.colors['secondary']
+        )
+        self.ai_status_label.pack(side=tk.LEFT, anchor=tk.W)
+
+        self.ai_translate_btn = tk.Button(
+            ai_control_frame,
+            text="🤖 AI dịch theo ngữ cảnh",
+            font=("Segoe UI", 11, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=14,
+            pady=6,
+            cursor="hand2",
+            command=self.run_ai_translate_current
+        )
+        self.ai_translate_btn.pack(side=tk.RIGHT)
+
+        if not self.gemini_enabled:
+            self.ai_translate_btn.configure(state=tk.DISABLED, bg=self.colors['border'], fg=self.colors['dark'])
+
+        self.reset_ai_ui_state(reset_context=True)
+
+    def reset_ai_ui_state(self, reset_context=False, clear_word_info=True):
+        """Reset trạng thái liên quan đến AI/context"""
+        self.current_ai_vi = None
+        self.current_ai_example_en = None
+        self.ai_vi_label = None
+        if reset_context and hasattr(self, 'context_text') and self.context_text.winfo_exists():
+            self.context_text.delete('1.0', tk.END)
+        if hasattr(self, 'ai_status_var'):
+            default_status = (
+                "AI chưa khả dụng - kiểm tra GEMINI_API_KEY"
+                if not self.gemini_enabled
+                else "Nhập ngữ cảnh tùy chọn rồi bấm nút để dịch"
+            )
+            self.ai_status_var.set(default_status)
+        if hasattr(self, 'ai_translate_btn'):
+            btn_state = tk.NORMAL if self.gemini_enabled else tk.DISABLED
+            btn_bg = self.colors['secondary'] if self.gemini_enabled else self.colors['border']
+            btn_fg = self.colors['white'] if self.gemini_enabled else self.colors['dark']
+            self.ai_translate_btn.configure(state=btn_state, text="🤖 AI dịch theo ngữ cảnh", bg=btn_bg, fg=btn_fg)
+        if clear_word_info:
+            self.current_word_info = None
+
     def create_new_tab(self, word="New Tab"):
         """Create a new tab"""
         self.tab_counter += 1
@@ -450,9 +529,10 @@ class CambridgeDictionaryApp:
         self.result_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
     def show_welcome(self):
+        self.reset_ai_ui_state(reset_context=True)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-        
+
         welcome_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
         welcome_frame.pack(pady=100)
         
@@ -517,9 +597,10 @@ class CambridgeDictionaryApp:
             feature_label.pack(pady=2, padx=50)
         
     def clear_results(self):
+        self.reset_ai_ui_state(clear_word_info=True)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-    
+
     def translate_text(self, text):
         """Dịch với AI (ưu tiên) hoặc Google Translate fallback"""
         # Kiểm tra cache trước
@@ -1055,9 +1136,9 @@ class CambridgeDictionaryApp:
     
     def _display_results(self, word_info):
         """Hiển thị kết quả với giao diện đẹp"""
-        self.current_word_info = word_info
         self.clear_results()
-        
+        self.current_word_info = word_info
+
         content_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
         content_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=20)
         
@@ -1326,16 +1407,27 @@ class CambridgeDictionaryApp:
                 })
 
     def run_ai_translate_current(self):
-        if not self.gemini_enabled or not hasattr(self, 'current_word_info'):
+        if not self.gemini_enabled:
             return
-        word = self.current_word_info['word']
-        context = self.context_text.get('1.0', tk.END).strip()
-        defs_en = [d.get('definition', '') for d in self.current_word_info.get('definitions', [])][:3]
+        word_info = getattr(self, 'current_word_info', None)
+        if not word_info:
+            return
+        word = word_info['word']
+        context_widget = getattr(self, 'context_text', None)
+        context = context_widget.get('1.0', tk.END).strip() if context_widget else ""
+        defs_en = [d.get('definition', '') for d in word_info.get('definitions', [])][:3]
 
         # UI: show loading and disable button
         try:
-            self.ai_status_var.set("Đang gọi AI…")
-            self.ai_translate_btn.configure(state=tk.DISABLED, text="Đang dịch…")
+            if hasattr(self, 'ai_status_var'):
+                self.ai_status_var.set("Đang gọi AI…")
+            if hasattr(self, 'ai_translate_btn'):
+                self.ai_translate_btn.configure(
+                    state=tk.DISABLED,
+                    text="Đang dịch…",
+                    bg=self.colors['border'],
+                    fg=self.colors['dark']
+                )
         except Exception:
             pass
 
@@ -1343,12 +1435,20 @@ class CambridgeDictionaryApp:
             vi, example_en = self.ai_translate_with_context(word, defs_en, context)
             def done():
                 try:
-                    if vi:
+                    if vi and getattr(self, 'ai_vi_label', None):
                         self.ai_vi_label.config(text=f"  •  {vi}")
-                        self.ai_status_var.set("Hoàn tất")
-                    else:
-                        self.ai_status_var.set("AI không trả kết quả - Kiểm tra console")
-                    self.ai_translate_btn.configure(state=tk.NORMAL, text="🤖 AI dịch theo ngữ cảnh")
+                    if hasattr(self, 'ai_status_var'):
+                        if vi:
+                            self.ai_status_var.set("Hoàn tất")
+                        else:
+                            self.ai_status_var.set("AI không trả kết quả - Kiểm tra console")
+                    if hasattr(self, 'ai_translate_btn'):
+                        self.ai_translate_btn.configure(
+                            state=tk.NORMAL,
+                            text="🤖 AI dịch theo ngữ cảnh",
+                            bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
+                            fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
+                        )
                 except Exception:
                     pass
                 self.current_ai_vi = vi
@@ -1389,8 +1489,15 @@ class CambridgeDictionaryApp:
         except Exception as e:
             print(f"[AI] Error: {type(e).__name__}: {str(e)}")
             try:
-                self.ai_status_var.set(f"Lỗi: {type(e).__name__}")
-                self.ai_translate_btn.configure(state=tk.NORMAL, text="🤖 AI dịch theo ngữ cảnh")
+                if hasattr(self, 'ai_status_var'):
+                    self.ai_status_var.set(f"Lỗi: {type(e).__name__}")
+                if hasattr(self, 'ai_translate_btn'):
+                    self.ai_translate_btn.configure(
+                        state=tk.NORMAL,
+                        text="🤖 AI dịch theo ngữ cảnh",
+                        bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
+                        fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
+                    )
             except Exception:
                 pass
             return None, None
