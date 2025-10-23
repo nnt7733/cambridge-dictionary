@@ -426,13 +426,29 @@ class CambridgeDictionaryApp:
         context_section = tk.Frame(self.main_frame, bg=self.colors['white'])
         context_section.pack(fill=tk.X, pady=(10, 0))
 
+        # Context checkbox and label
+        context_header_frame = tk.Frame(context_section, bg=self.colors['white'])
+        context_header_frame.pack(fill=tk.X)
+        
+        self.use_context_var = tk.BooleanVar()
+        context_checkbox = tk.Checkbutton(
+            context_header_frame,
+            text="🎯 Sử dụng ngữ cảnh để dịch chính xác hơn",
+            font=("Segoe UI", 11, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['dark'],
+            variable=self.use_context_var,
+            command=self._toggle_context_input
+        )
+        context_checkbox.pack(side=tk.LEFT)
+        
         tk.Label(
-            context_section,
+            context_header_frame,
             text="Ngữ cảnh (tùy chọn) cho bản dịch AI:",
             font=("Segoe UI", 11, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
-        ).pack(anchor=tk.W)
+        ).pack(side=tk.LEFT, padx=(20, 0))
 
         self.context_text = tk.Text(
             context_section,
@@ -1872,11 +1888,9 @@ class CambridgeDictionaryApp:
         )
         self.translate_input.pack(fill=tk.BOTH, expand=True)
         
-        # Auto-resize and auto-translate
+        # Auto-resize only (no auto-translate)
         self.translate_input.bind('<KeyPress>', self._on_input_change)
         self.translate_input.bind('<KeyRelease>', self._on_input_change)
-        self.translate_input.bind('<Button-1>', self._on_input_click)
-        self.translate_input.bind('<FocusOut>', self._on_input_focus_out)
         
         # Right column - Translation
         right_column = tk.Frame(main_frame, bg=self.colors['white'])
@@ -1906,20 +1920,39 @@ class CambridgeDictionaryApp:
         )
         self.translate_output.pack(fill=tk.BOTH, expand=True)
         
-        # Clear button (small, bottom right)
+        # Button frame
+        btn_frame = tk.Frame(translator_frame, bg=self.colors['white'])
+        btn_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Translate button
+        translate_btn = tk.Button(
+            btn_frame,
+            text="🤖 Dịch",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=30,
+            pady=8,
+            cursor="hand2",
+            command=self.translate_text_ui
+        )
+        translate_btn.pack(side=tk.LEFT)
+        
+        # Clear button
         clear_btn = tk.Button(
-            translator_frame,
+            btn_frame,
             text="🗑️ Xóa",
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 11),
             bg="#ef4444",
             fg=self.colors['white'],
             relief=tk.FLAT,
-            padx=15,
-            pady=5,
+            padx=20,
+            pady=8,
             cursor="hand2",
             command=lambda: self._clear_translator_ui()
         )
-        clear_btn.pack(anchor=tk.E, pady=(0, 10))
+        clear_btn.pack(side=tk.LEFT, padx=(10, 0))
         
         # Vocabulary explanation section
         vocab_section = tk.Frame(translator_frame, bg=self.colors['white'])
@@ -2176,19 +2209,12 @@ Ví dụ format:
         if new_height != self.translate_input.cget('height'):
             self.translate_input.config(height=new_height)
     
-    def _on_input_click(self, event=None):
-        """Handle input click - auto translate after delay"""
-        self.root.after(1000, self._auto_translate_delayed)
-    
-    def _on_input_focus_out(self, event=None):
-        """Handle input focus out - auto translate"""
-        self._auto_translate_delayed()
-    
-    def _auto_translate_delayed(self):
-        """Auto translate with delay to avoid too many calls"""
-        text = self.translate_input.get("1.0", tk.END).strip()
-        if text and len(text) > 3:  # Only translate if meaningful text
-            self.translate_text_ui()
+    def _toggle_context_input(self):
+        """Toggle context input visibility"""
+        if self.use_context_var.get():
+            self.context_text.pack(fill=tk.X, pady=(4, 6))
+        else:
+            self.context_text.pack_forget()
 
 
 def main():
