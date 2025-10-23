@@ -616,7 +616,10 @@ class CambridgeDictionaryApp:
     def ai_translate_simple(self, text: str) -> str:
         """Dịch đơn giản EN->VI bằng AI"""
         try:
-            prompt = f"Translate to Vietnamese (keep it natural and concise): {text}"
+            prompt = (
+                f"Translate the following English text to Vietnamese. Use the simplest, "
+                f"most common, and easiest-to-understand meaning. Return only the translation: {text}"
+            )
             resp = self.gemini_model.generate_content(prompt)
             result = (getattr(resp, 'text', None) or '').strip()
             # Remove quotes if wrapped
@@ -1236,7 +1239,7 @@ class CambridgeDictionaryApp:
         def_text_label = tk.Label(
             en_def_frame,
             text=definition['definition'],
-            font=("Segoe UI", 13),
+            font=("Segoe UI", 14, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark'],
             wraplength=400,
@@ -1286,7 +1289,7 @@ class CambridgeDictionaryApp:
                 ex_text_label = tk.Label(
                     ex_frame,
                     text=f"• {ex}",
-                    font=("Segoe UI", 12, "italic"),
+                    font=("Segoe UI", 13, "bold"),
                     bg=self.colors['white'],
                     fg=self.colors['dark'],
                     wraplength=400,
