@@ -1721,14 +1721,15 @@ class CambridgeDictionaryApp:
         vocab_window.title("Danh sách từ vựng")
         vocab_window.geometry("700x500")
         
-        tk.Label(
+        self.vocab_title_label = tk.Label(
             vocab_window,
             text=f"📚 Từ vựng của tôi ({len(self.vocabulary)} từ)",
             font=("Arial", 16, "bold"),
             bg="#8E44AD",
             fg="white",
             pady=15
-        ).pack(fill=tk.X)
+        )
+        self.vocab_title_label.pack(fill=tk.X)
         
         list_frame = tk.Frame(vocab_window)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -1764,14 +1765,10 @@ class CambridgeDictionaryApp:
                     del self.vocabulary[idx]
                     self.save_vocabulary()
                     vocab_listbox.delete(idx)
-                    tk.Label(
-                        vocab_window,
-                        text=f"📚 Từ vựng của tôi ({len(self.vocabulary)} từ)",
-                        font=("Arial", 16, "bold"),
-                        bg="#8E44AD",
-                        fg="white",
-                        pady=15
-                    ).pack(fill=tk.X)
+                    if getattr(self, "vocab_title_label", None):
+                        self.vocab_title_label.config(
+                            text=f"📚 Từ vựng của tôi ({len(self.vocabulary)} từ)"
+                        )
         
         def delete_all():
             if not self.vocabulary:
