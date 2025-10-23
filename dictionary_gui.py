@@ -13,10 +13,52 @@ import time
 import sys
 import bisect
 import hashlib
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+
+def load_environment():
+    """Load environment variables from common locations.
+
+    Khi đóng gói bằng PyInstaller, __file__ có thể khác hoặc không tồn tại và
+    .env có thể nằm cùng thư mục với file .exe. Hàm này sẽ dò nhiều vị trí
+    khả dụng để đảm bảo biến môi trường được nạp."""
+
+    search_paths = []
+
+    # PyInstaller unpacked temp directory (sys._MEIPASS)
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        search_paths.append(Path(meipass))
+
+    # Thư mục chứa file thực thi khi chạy dưới dạng .exe
+    if getattr(sys, "frozen", False):
+        search_paths.append(Path(sys.executable).resolve().parent)
+
+    # Thư mục chứa file source và thư mục hiện tại
+    search_paths.append(Path(__file__).resolve().parent)
+    search_paths.append(Path.cwd())
+
+    loaded = False
+    for path in search_paths:
+        env_path = path / ".env"
+        try:
+            if env_path.exists():
+                # Lần đầu tiên load sẽ override các biến hiện tại
+                load_result = load_dotenv(env_path, override=not loaded)
+                if load_result:
+                    loaded = True
+                    print(f"[Env] Loaded .env from {env_path}")
+        except Exception as e:
+            print(f"[Env] Could not load {env_path}: {e}")
+
+    # Fallback để đảm bảo biến môi trường hệ thống vẫn được đọc
+    if not loaded:
+        load_dotenv()
+
+
+load_environment()
 
 class CambridgeDictionaryApp:
     def __init__(self, root):
