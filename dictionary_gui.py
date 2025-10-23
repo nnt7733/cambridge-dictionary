@@ -28,11 +28,6 @@ class CambridgeDictionaryApp:
         # Configure modern styling
         self.root.configure(bg="#f8f9fa")
         
-        # Tab system
-        self.tabs = {}
-        self.current_tab = None
-        self.tab_counter = 0
-        
         # Khởi tạo TTS engine
         try:
             self.tts_engine = pyttsx3.init()
@@ -177,10 +172,15 @@ class CambridgeDictionaryApp:
         
         # Main content area
         self.setup_main_content()
-        
-        # Create initial tab
-        self.create_new_tab("Welcome")
+
+        # Create initial status
+        self.update_current_word_display("Welcome")
         self.show_welcome()
+
+    def update_current_word_display(self, word):
+        display = word.strip() if word else "Welcome"
+        if hasattr(self, 'current_word_var'):
+            self.current_word_var.set(f"📄 {display}")
         
     def setup_header(self):
         """Setup modern header"""
@@ -214,21 +214,6 @@ class CambridgeDictionaryApp:
         btn_frame = tk.Frame(header_frame, bg=self.colors['primary'])
         btn_frame.pack(side=tk.RIGHT, padx=20, pady=15)
         
-        # New tab button
-        new_tab_btn = tk.Button(
-            btn_frame,
-            text="➕ New Tab",
-            font=("Segoe UI", 10, "bold"),
-            bg=self.colors['secondary'],
-            fg=self.colors['white'],
-            relief=tk.FLAT,
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=self.create_new_tab
-        )
-        new_tab_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
         # Vocabulary button
         vocab_btn = tk.Button(
             btn_frame,
@@ -245,14 +230,20 @@ class CambridgeDictionaryApp:
         vocab_btn.pack(side=tk.LEFT)
         
     def setup_tab_system(self):
-        """Setup tab system"""
+        """Setup single-page status bar"""
         self.tab_frame = tk.Frame(self.root, bg=self.colors['light'], height=40)
         self.tab_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
         self.tab_frame.pack_propagate(False)
-        
-        # Tab container
-        self.tab_container = tk.Frame(self.tab_frame, bg=self.colors['light'])
-        self.tab_container.pack(fill=tk.X, padx=10, pady=5)
+
+        self.current_word_var = tk.StringVar(value="📄 Welcome")
+        self.current_word_label = tk.Label(
+            self.tab_frame,
+            textvariable=self.current_word_var,
+            font=("Segoe UI", 11, "bold"),
+            bg=self.colors['light'],
+            fg=self.colors['dark']
+        )
+        self.current_word_label.pack(side=tk.LEFT, padx=10)
         
     def setup_search_bar(self):
         """Setup modern search bar"""
@@ -428,107 +419,11 @@ class CambridgeDictionaryApp:
         if clear_word_info:
             self.current_word_info = None
 
-    def create_new_tab(self, word="New Tab"):
-        """Create a new tab"""
-        self.tab_counter += 1
-        tab_id = f"tab_{self.tab_counter}"
-        
-        # Create tab button
-        tab_btn = tk.Button(
-            self.tab_container,
-            text=f"📄 {word}",
-            font=("Segoe UI", 10),
-            bg=self.colors['border'],
-            fg=self.colors['dark'],
-            relief=tk.FLAT,
-            padx=15,
-            pady=5,
-            cursor="hand2",
-            command=lambda: self.switch_tab(tab_id)
-        )
-        tab_btn.pack(side=tk.LEFT, padx=(0, 2))
-        
-        # Close button for tab
-        close_btn = tk.Button(
-            self.tab_container,
-            text="✕",
-            font=("Segoe UI", 8, "bold"),
-            bg=self.colors['danger'],
-            fg=self.colors['white'],
-            relief=tk.FLAT,
-            padx=5,
-            pady=5,
-            cursor="hand2",
-            command=lambda: self.close_tab(tab_id)
-        )
-        close_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Store tab info
-        self.tabs[tab_id] = {
-            'button': tab_btn,
-            'close_btn': close_btn,
-            'word': word,
-            'content': None
-        }
-        
-        # Switch to new tab
-        self.switch_tab(tab_id)
-        
-        return tab_id
-        
-    def switch_tab(self, tab_id):
-        """Switch to a specific tab"""
-        if tab_id not in self.tabs:
-            return
-            
-        # Update button styles
-        for tid, tab_info in self.tabs.items():
-            if tid == tab_id:
-                tab_info['button'].configure(bg=self.colors['secondary'], fg=self.colors['white'])
-                self.current_tab = tid
-            else:
-                tab_info['button'].configure(bg=self.colors['border'], fg=self.colors['dark'])
-        
-        # Clear current content
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-            
-        # Load tab content if exists
-        if self.tabs[tab_id]['content']:
-            self.load_tab_content(tab_id)
-        else:
-            self.show_welcome()
-            
-    def close_tab(self, tab_id):
-        """Close a tab"""
-        if tab_id not in self.tabs or len(self.tabs) <= 1:
-            return
-            
-        # Remove tab buttons
-        self.tabs[tab_id]['button'].destroy()
-        self.tabs[tab_id]['close_btn'].destroy()
-        
-        # Remove from tabs dict
-        del self.tabs[tab_id]
-        
-        # Switch to another tab
-        if self.current_tab == tab_id:
-            remaining_tabs = list(self.tabs.keys())
-            if remaining_tabs:
-                self.switch_tab(remaining_tabs[0])
-                
-    def load_tab_content(self, tab_id):
-        """Load content for a specific tab"""
-        if tab_id not in self.tabs or not self.tabs[tab_id]['content']:
-            return
-            
-        content = self.tabs[tab_id]['content']
-        self._display_results(content)
-        
     def _on_mousewheel(self, event):
         self.result_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
     def show_welcome(self):
+        self.update_current_word_display("Welcome")
         self.reset_ai_ui_state(reset_context=True)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
@@ -566,7 +461,7 @@ class CambridgeDictionaryApp:
         
         instruction_label = tk.Label(
             welcome_frame,
-            text="Enter a word above to search and create a new tab",
+            text="Enter a word above to start exploring definitions",
             font=("Segoe UI", 12),
             bg=self.colors['white'],
             fg=self.colors['dark']
@@ -759,17 +654,20 @@ class CambridgeDictionaryApp:
     
     def search_word(self):
         word = self.word_entry.get().strip()
-        
+
         if not word:
             messagebox.showwarning("Warning", "Please enter a word!")
             return
-        
-        # Create new tab for this word
-        tab_id = self.create_new_tab(word)
-        
+
+        # Update status bar for this word
+        self.update_current_word_display(word)
+
+        # Ẩn danh sách gợi ý khi bắt đầu tra cứu
+        self.hide_suggestions()
+
         # Clear search entry
         self.word_entry.delete(0, tk.END)
-        
+
         # Kiểm tra word cache
         if word.lower() in self.word_cache:
             print(f"⚡ Loading from cache: {word}")
@@ -796,9 +694,9 @@ class CambridgeDictionaryApp:
         )
         loading_dots.pack()
         
-        threading.Thread(target=self._search_word_thread, args=(word, tab_id), daemon=True).start()
-    
-    def _search_word_thread(self, word, tab_id):
+        threading.Thread(target=self._search_word_thread, args=(word,), daemon=True).start()
+
+    def _search_word_thread(self, word):
         start_time = time.time()
         word_info = self.get_word_info(word)
         elapsed = time.time() - start_time
@@ -816,13 +714,6 @@ class CambridgeDictionaryApp:
             self.search_history.insert(0, word.lower())
             if len(self.search_history) > 50:  # Giữ tối đa 50 từ
                 self.search_history.pop()
-        
-        # Store content in tab
-        self.tabs[tab_id]['content'] = word_info
-        self.tabs[tab_id]['word'] = word
-        
-        # Update tab button text
-        self.tabs[tab_id]['button'].configure(text=f"📄 {word}")
         
         self.root.after(0, lambda: self._display_results(word_info))
     
@@ -943,9 +834,14 @@ class CambridgeDictionaryApp:
     def on_suggestion_click(self, event):
         """Khi click vào suggestion"""
         try:
-            selection = self.suggestion_listbox.curselection()
-            if selection:
-                word = self.suggestion_listbox.get(selection[0])
+            if self.suggestion_listbox.size() == 0:
+                return
+
+            index = self.suggestion_listbox.nearest(event.y)
+            if index >= 0:
+                self.suggestion_listbox.selection_clear(0, tk.END)
+                self.suggestion_listbox.selection_set(index)
+                word = self.suggestion_listbox.get(index)
                 self.word_entry.delete(0, tk.END)
                 self.word_entry.insert(0, word)
                 self.hide_suggestions()
