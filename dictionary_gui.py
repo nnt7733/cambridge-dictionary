@@ -281,6 +281,21 @@ class CambridgeDictionaryApp:
         btn_frame = tk.Frame(header_frame, bg=self.colors['primary'])
         btn_frame.pack(side=tk.RIGHT, padx=20, pady=15)
         
+        # Text Translator button
+        translator_btn = tk.Button(
+            btn_frame,
+            text="🌐 Dịch văn bản",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=self.show_text_translator
+        )
+        translator_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
         # Vocabulary button
         vocab_btn = tk.Button(
             btn_frame,
@@ -1793,6 +1808,223 @@ class CambridgeDictionaryApp:
             pady=8, 
             command=self.export_to_excel
         ).pack(side=tk.LEFT)
+
+    def show_text_translator(self):
+        """Hiển thị giao diện dịch văn bản AI"""
+        # Clear current content
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        self.update_current_word_display("Dịch văn bản AI")
+        
+        # Main translator container
+        translator_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
+        translator_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+        
+        # Title
+        title_label = tk.Label(
+            translator_frame,
+            text="🌐 Dịch văn bản AI",
+            font=("Segoe UI", 24, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['primary']
+        )
+        title_label.pack(anchor=tk.W, pady=(0, 10))
+        
+        # Description
+        desc_label = tk.Label(
+            translator_frame,
+            text="Paste văn bản tiếng Anh vào ô bên dưới để dịch sang tiếng Việt (hỗ trợ dịch theo ngữ cảnh)",
+            font=("Segoe UI", 11),
+            bg=self.colors['white'],
+            fg="#64748b"
+        )
+        desc_label.pack(anchor=tk.W, pady=(0, 20))
+        
+        # Input section
+        input_frame = tk.Frame(translator_frame, bg=self.colors['white'])
+        input_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        
+        # Input label
+        tk.Label(
+            input_frame,
+            text="📝 Văn bản cần dịch:",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
+        ).pack(anchor=tk.W, pady=(0, 8))
+        
+        # Input text area
+        self.translate_input = tk.Text(
+            input_frame,
+            height=10,
+            font=("Segoe UI", 11),
+            wrap=tk.WORD,
+            bg=self.colors['light'],
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=15,
+            pady=12
+        )
+        self.translate_input.pack(fill=tk.BOTH, expand=True)
+        
+        # Button frame
+        btn_frame = tk.Frame(translator_frame, bg=self.colors['white'])
+        btn_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        # Translate button
+        translate_btn = tk.Button(
+            btn_frame,
+            text="🤖 Dịch ngay",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['secondary'],
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=30,
+            pady=10,
+            cursor="hand2",
+            command=self.translate_text
+        )
+        translate_btn.pack(side=tk.LEFT)
+        
+        # Clear button
+        clear_btn = tk.Button(
+            btn_frame,
+            text="🗑️ Xóa",
+            font=("Segoe UI", 11),
+            bg="#ef4444",
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=20,
+            pady=10,
+            cursor="hand2",
+            command=lambda: (self.translate_input.delete("1.0", tk.END), self.translate_output.delete("1.0", tk.END))
+        )
+        clear_btn.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Output section
+        output_frame = tk.Frame(translator_frame, bg=self.colors['white'])
+        output_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Output label
+        tk.Label(
+            output_frame,
+            text="✅ Kết quả dịch:",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.colors['white'],
+            fg=self.colors['dark']
+        ).pack(anchor=tk.W, pady=(0, 8))
+        
+        # Output text area
+        self.translate_output = tk.Text(
+            output_frame,
+            height=10,
+            font=("Segoe UI", 11),
+            wrap=tk.WORD,
+            bg="#f0fdf4",
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=15,
+            pady=12,
+            state=tk.DISABLED
+        )
+        self.translate_output.pack(fill=tk.BOTH, expand=True)
+        
+        # AI status
+        if not self.gemini_enabled:
+            warning_label = tk.Label(
+                translator_frame,
+                text="⚠️ AI chưa khả dụng. Sẽ sử dụng Google Translate.",
+                font=("Segoe UI", 10),
+                bg=self.colors['white'],
+                fg=self.colors['warning']
+            )
+            warning_label.pack(anchor=tk.W, pady=(10, 0))
+
+    def translate_text(self):
+        """Dịch văn bản bằng AI"""
+        text = self.translate_input.get("1.0", tk.END).strip()
+        
+        if not text:
+            messagebox.showwarning("Cảnh báo", "Vui lòng nhập văn bản cần dịch!")
+            return
+        
+        # Clear output
+        self.translate_output.config(state=tk.NORMAL)
+        self.translate_output.delete("1.0", tk.END)
+        self.translate_output.insert("1.0", "🔄 Đang dịch...\n")
+        self.translate_output.config(state=tk.DISABLED)
+        self.root.update()
+        
+        # Run translation in background thread
+        threading.Thread(target=self._translate_text_thread, args=(text,), daemon=True).start()
+    
+    def _translate_text_thread(self, text):
+        """Thread dịch văn bản"""
+        try:
+            # Count words
+            words = text.split()
+            word_count = len(words)
+            
+            # If single word, suggest using dictionary search
+            if word_count == 1:
+                self.root.after(0, lambda: self._update_translation_result(
+                    f"💡 Gợi ý: Đây là 1 từ đơn. Bạn có thể tra từ điển để xem nghĩa chi tiết hơn.\n\n"
+                    f"Nghĩa: {self._translate_simple(text)}"
+                ))
+                return
+            
+            # For 2+ words, translate with context using AI
+            if self.gemini_enabled:
+                result = self._translate_with_gemini(text)
+            else:
+                result = self._translate_simple(text)
+            
+            self.root.after(0, lambda: self._update_translation_result(result))
+            
+        except Exception as e:
+            error_msg = f"❌ Lỗi dịch: {str(e)}"
+            print(error_msg)
+            self.root.after(0, lambda: self._update_translation_result(error_msg))
+    
+    def _translate_with_gemini(self, text):
+        """Dịch văn bản bằng Gemini AI với ngữ cảnh"""
+        try:
+            prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt tự nhiên, sát nghĩa và phù hợp ngữ cảnh:
+
+"{text}"
+
+Yêu cầu:
+- Dịch tự nhiên, dễ hiểu
+- Giữ nguyên ý nghĩa
+- Phù hợp ngữ cảnh
+- CHỈ trả về bản dịch tiếng Việt, KHÔNG giải thích thêm"""
+
+            response = self.gemini_model.generate_content(prompt)
+            translation = response.text.strip()
+            
+            return f"🤖 AI dịch:\n\n{translation}"
+            
+        except Exception as e:
+            print(f"Gemini translation failed: {e}")
+            # Fallback to Google Translate
+            return self._translate_simple(text)
+    
+    def _translate_simple(self, text):
+        """Dịch văn bản bằng Google Translate"""
+        try:
+            translator = GoogleTranslator(source='en', target='vi')
+            translation = translator.translate(text)
+            return f"🌐 Google Translate:\n\n{translation}"
+        except Exception as e:
+            return f"❌ Lỗi dịch: {str(e)}"
+    
+    def _update_translation_result(self, result):
+        """Cập nhật kết quả dịch vào UI"""
+        self.translate_output.config(state=tk.NORMAL)
+        self.translate_output.delete("1.0", tk.END)
+        self.translate_output.insert("1.0", result)
+        self.translate_output.config(state=tk.DISABLED)
 
 
 def main():
