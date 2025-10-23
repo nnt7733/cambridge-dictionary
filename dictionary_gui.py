@@ -1883,7 +1883,7 @@ class CambridgeDictionaryApp:
             padx=30,
             pady=10,
             cursor="hand2",
-            command=self.translate_text
+            command=self.translate_text_ui
         )
         translate_btn.pack(side=tk.LEFT)
         
@@ -1941,8 +1941,8 @@ class CambridgeDictionaryApp:
             )
             warning_label.pack(anchor=tk.W, pady=(10, 0))
 
-    def translate_text(self):
-        """Dịch văn bản bằng AI"""
+    def translate_text_ui(self):
+        """Dịch văn bản bằng AI từ UI"""
         text = self.translate_input.get("1.0", tk.END).strip()
         
         if not text:
