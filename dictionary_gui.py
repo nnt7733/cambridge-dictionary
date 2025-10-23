@@ -1841,23 +1841,27 @@ class CambridgeDictionaryApp:
         )
         desc_label.pack(anchor=tk.W, pady=(0, 20))
         
-        # Input section
-        input_frame = tk.Frame(translator_frame, bg=self.colors['white'])
-        input_frame.pack(fill=tk.X, pady=(0, 20))
+        # Main translation area - Google Translate style
+        main_frame = tk.Frame(translator_frame, bg=self.colors['white'])
+        main_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Left column - Input
+        left_column = tk.Frame(main_frame, bg=self.colors['white'])
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
         
         # Input label
         tk.Label(
-            input_frame,
+            left_column,
             text="📝 Văn bản cần dịch:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
         ).pack(anchor=tk.W, pady=(0, 8))
         
-        # Input text area with auto-resize
+        # Input text area with auto-resize and auto-translate
         self.translate_input = tk.Text(
-            input_frame,
-            height=6,
+            left_column,
+            height=8,
             font=("Segoe UI", 11),
             wrap=tk.WORD,
             bg=self.colors['light'],
@@ -1866,84 +1870,16 @@ class CambridgeDictionaryApp:
             padx=15,
             pady=12
         )
-        self.translate_input.pack(fill=tk.X)
+        self.translate_input.pack(fill=tk.BOTH, expand=True)
         
-        # Auto-resize text area
+        # Auto-resize and auto-translate
         self.translate_input.bind('<KeyPress>', self._on_input_change)
         self.translate_input.bind('<KeyRelease>', self._on_input_change)
-        
-        # Button frame
-        btn_frame = tk.Frame(translator_frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X, pady=(0, 20))
-        
-        # Translate button
-        translate_btn = tk.Button(
-            btn_frame,
-            text="🤖 Dịch ngay",
-            font=("Segoe UI", 12, "bold"),
-            bg=self.colors['secondary'],
-            fg=self.colors['white'],
-            relief=tk.FLAT,
-            padx=30,
-            pady=10,
-            cursor="hand2",
-            command=self.translate_text_ui
-        )
-        translate_btn.pack(side=tk.LEFT)
-        
-        # Clear button
-        clear_btn = tk.Button(
-            btn_frame,
-            text="🗑️ Xóa",
-            font=("Segoe UI", 11),
-            bg="#ef4444",
-            fg=self.colors['white'],
-            relief=tk.FLAT,
-            padx=20,
-            pady=10,
-            cursor="hand2",
-            command=lambda: self._clear_translator_ui()
-        )
-        clear_btn.pack(side=tk.LEFT, padx=(10, 0))
-        
-        # Output section - Google Translate style
-        output_frame = tk.Frame(translator_frame, bg=self.colors['white'])
-        output_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Top section - Source and Translation side by side
-        top_section = tk.Frame(output_frame, bg=self.colors['white'])
-        top_section.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-        
-        # Left column - Source text
-        left_column = tk.Frame(top_section, bg=self.colors['white'])
-        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        # Source text label
-        tk.Label(
-            left_column,
-            text="📄 Văn bản gốc:",
-            font=("Segoe UI", 12, "bold"),
-            bg=self.colors['white'],
-            fg=self.colors['dark']
-        ).pack(anchor=tk.W, pady=(0, 8))
-        
-        # Source text area (read-only)
-        self.source_display = tk.Text(
-            left_column,
-            height=8,
-            font=("Segoe UI", 11),
-            wrap=tk.WORD,
-            bg="#f8f9fa",
-            relief=tk.SOLID,
-            borderwidth=1,
-            padx=15,
-            pady=12,
-            state=tk.DISABLED
-        )
-        self.source_display.pack(fill=tk.BOTH, expand=True)
+        self.translate_input.bind('<Button-1>', self._on_input_click)
+        self.translate_input.bind('<FocusOut>', self._on_input_focus_out)
         
         # Right column - Translation
-        right_column = tk.Frame(top_section, bg=self.colors['white'])
+        right_column = tk.Frame(main_frame, bg=self.colors['white'])
         right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
         
         # Translation label
@@ -1970,13 +1906,28 @@ class CambridgeDictionaryApp:
         )
         self.translate_output.pack(fill=tk.BOTH, expand=True)
         
-        # Bottom section - Vocabulary explanation
-        bottom_section = tk.Frame(output_frame, bg=self.colors['white'])
-        bottom_section.pack(fill=tk.X)
+        # Clear button (small, bottom right)
+        clear_btn = tk.Button(
+            translator_frame,
+            text="🗑️ Xóa",
+            font=("Segoe UI", 10),
+            bg="#ef4444",
+            fg=self.colors['white'],
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            command=lambda: self._clear_translator_ui()
+        )
+        clear_btn.pack(anchor=tk.E, pady=(0, 10))
+        
+        # Vocabulary explanation section
+        vocab_section = tk.Frame(translator_frame, bg=self.colors['white'])
+        vocab_section.pack(fill=tk.X, pady=(15, 0))
         
         # Vocabulary explanation label
         tk.Label(
-            bottom_section,
+            vocab_section,
             text="📚 Giải thích từ vựng:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
@@ -1985,7 +1936,7 @@ class CambridgeDictionaryApp:
         
         # Vocabulary explanation text area
         self.vocab_explanation = tk.Text(
-            bottom_section,
+            vocab_section,
             height=6,
             font=("Segoe UI", 10),
             wrap=tk.WORD,
@@ -1997,47 +1948,6 @@ class CambridgeDictionaryApp:
             state=tk.DISABLED
         )
         self.vocab_explanation.pack(fill=tk.X)
-        
-        # Context section with checkbox
-        context_frame = tk.Frame(translator_frame, bg=self.colors['white'])
-        context_frame.pack(fill=tk.X, pady=(15, 0))
-        
-        # Context checkbox
-        self.use_context_var = tk.BooleanVar()
-        context_checkbox = tk.Checkbutton(
-            context_frame,
-            text="🎯 Sử dụng ngữ cảnh để dịch chính xác hơn",
-            font=("Segoe UI", 11, "bold"),
-            bg=self.colors['white'],
-            fg=self.colors['dark'],
-            variable=self.use_context_var,
-            command=self._toggle_context_input
-        )
-        context_checkbox.pack(anchor=tk.W, pady=(0, 8))
-        
-        # Context input (initially hidden)
-        self.context_input_frame = tk.Frame(context_frame, bg=self.colors['white'])
-        
-        tk.Label(
-            self.context_input_frame,
-            text="📝 Ngữ cảnh (tùy chọn):",
-            font=("Segoe UI", 10),
-            bg=self.colors['white'],
-            fg=self.colors['dark']
-        ).pack(anchor=tk.W, pady=(0, 5))
-        
-        self.context_input = tk.Text(
-            self.context_input_frame,
-            height=3,
-            font=("Segoe UI", 10),
-            wrap=tk.WORD,
-            bg=self.colors['light'],
-            relief=tk.SOLID,
-            borderwidth=1,
-            padx=10,
-            pady=8
-        )
-        self.context_input.pack(fill=tk.X)
         
         # AI status
         if not self.gemini_enabled:
@@ -2055,14 +1965,14 @@ class CambridgeDictionaryApp:
         text = self.translate_input.get("1.0", tk.END).strip()
         
         if not text:
-            messagebox.showwarning("Cảnh báo", "Vui lòng nhập văn bản cần dịch!")
+            # Clear outputs if empty
+            self.translate_output.config(state=tk.NORMAL)
+            self.translate_output.delete("1.0", tk.END)
+            self.translate_output.config(state=tk.DISABLED)
+            self.vocab_explanation.config(state=tk.NORMAL)
+            self.vocab_explanation.delete("1.0", tk.END)
+            self.vocab_explanation.config(state=tk.DISABLED)
             return
-        
-        # Display source text
-        self.source_display.config(state=tk.NORMAL)
-        self.source_display.delete("1.0", tk.END)
-        self.source_display.insert("1.0", text)
-        self.source_display.config(state=tk.DISABLED)
         
         # Clear outputs
         self.translate_output.config(state=tk.NORMAL)
@@ -2076,10 +1986,10 @@ class CambridgeDictionaryApp:
         self.vocab_explanation.config(state=tk.DISABLED)
         self.root.update()
         
-        # Get context if enabled
+        # Get context from main context box (shared)
         context = ""
-        if self.use_context_var.get():
-            context = self.context_input.get("1.0", tk.END).strip()
+        if hasattr(self, 'context_text'):
+            context = self.context_text.get("1.0", tk.END).strip()
         
         # Run translation in background thread
         threading.Thread(target=self._translate_text_thread, args=(text, context), daemon=True).start()
@@ -2246,18 +2156,12 @@ Ví dụ format:
     def _clear_translator_ui(self):
         """Xóa tất cả nội dung trong UI dịch văn bản"""
         self.translate_input.delete("1.0", tk.END)
-        self.source_display.config(state=tk.NORMAL)
-        self.source_display.delete("1.0", tk.END)
-        self.source_display.config(state=tk.DISABLED)
         self.translate_output.config(state=tk.NORMAL)
         self.translate_output.delete("1.0", tk.END)
         self.translate_output.config(state=tk.DISABLED)
         self.vocab_explanation.config(state=tk.NORMAL)
         self.vocab_explanation.delete("1.0", tk.END)
         self.vocab_explanation.config(state=tk.DISABLED)
-        self.context_input.delete("1.0", tk.END)
-        self.use_context_var.set(False)
-        self._toggle_context_input()
     
     def _on_input_change(self, event=None):
         """Auto-resize input text area based on content"""
@@ -2272,12 +2176,19 @@ Ví dụ format:
         if new_height != self.translate_input.cget('height'):
             self.translate_input.config(height=new_height)
     
-    def _toggle_context_input(self):
-        """Toggle context input visibility"""
-        if self.use_context_var.get():
-            self.context_input_frame.pack(fill=tk.X, pady=(0, 10))
-        else:
-            self.context_input_frame.pack_forget()
+    def _on_input_click(self, event=None):
+        """Handle input click - auto translate after delay"""
+        self.root.after(1000, self._auto_translate_delayed)
+    
+    def _on_input_focus_out(self, event=None):
+        """Handle input focus out - auto translate"""
+        self._auto_translate_delayed()
+    
+    def _auto_translate_delayed(self):
+        """Auto translate with delay to avoid too many calls"""
+        text = self.translate_input.get("1.0", tk.END).strip()
+        if text and len(text) > 3:  # Only translate if meaningful text
+            self.translate_text_ui()
 
 
 def main():
