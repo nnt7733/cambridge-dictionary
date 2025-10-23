@@ -2016,13 +2016,16 @@ class CambridgeDictionaryApp:
             
             # For 2+ words, translate with context using AI
             if self.gemini_enabled:
-                translation_result = self._translate_with_gemini(text)
+                # Start vocabulary explanation in background
                 vocab_explanation = self._get_vocab_explanation(text)
+                # Translation with streaming
+                translation_result = self._translate_with_gemini(text)
+                # Final update with vocab explanation
+                self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             else:
                 translation_result = self._translate_simple(text)
                 vocab_explanation = self._get_vocab_explanation(text)
-            
-            self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
+                self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             
         except Exception as e:
             error_msg = f"❌ Lỗi dịch: {str(e)}"
@@ -2042,9 +2045,19 @@ Yêu cầu:
 - Phù hợp ngữ cảnh
 - CHỈ trả về bản dịch tiếng Việt, KHÔNG giải thích thêm"""
 
-            response = self.gemini_model.generate_content(prompt)
-            translation = response.text.strip()
+            # Streaming response
+            response = self.gemini_model.generate_content(prompt, stream=True)
             
+            # Collect streaming text
+            translation_parts = []
+            for chunk in response:
+                if hasattr(chunk, 'text') and chunk.text:
+                    translation_parts.append(chunk.text)
+                    # Update UI in real-time
+                    current_text = ''.join(translation_parts)
+                    self.root.after(0, lambda t=current_text: self._update_translation_streaming(t))
+            
+            translation = ''.join(translation_parts).strip()
             return f"🤖 AI dịch:\n\n{translation}"
             
         except Exception as e:
@@ -2074,6 +2087,14 @@ Yêu cầu:
         self.vocab_explanation.insert("1.0", vocab_explanation)
         self.vocab_explanation.config(state=tk.DISABLED)
     
+    def _update_translation_streaming(self, current_text):
+        """Cập nhật kết quả dịch streaming (như ChatGPT)"""
+        self.translate_output.config(state=tk.NORMAL)
+        self.translate_output.delete("1.0", tk.END)
+        self.translate_output.insert("1.0", f"🤖 AI dịch:\n\n{current_text}")
+        self.translate_output.config(state=tk.DISABLED)
+        self.root.update()
+    
     def _get_vocab_explanation(self, text):
         """Lấy giải thích từ vựng chi tiết bằng AI"""
         try:
@@ -2094,27 +2115,27 @@ Yêu cầu:
 
 Trả lời ngắn gọn, dễ hiểu:"""
             else:
-                # Câu/đoạn văn
-                prompt = f"""Phân tích văn bản tiếng Anh sau và giải thích từng từ/cụm từ quan trọng:
+                # Câu/đoạn văn - CHỈ giải thích từ quan trọng
+                prompt = f"""Phân tích văn bản tiếng Anh sau và giải thích CHỈ các từ/cụm từ quan trọng:
 
 "{text}"
 
 Yêu cầu:
-- Tách các từ/cụm từ quan trọng
-- Giải thích nghĩa tiếng Việt của từng từ
-- Chỉ ra từ loại (danh từ, động từ, tính từ...)
-- Giải thích ngắn gọn, dễ hiểu
-- Sắp xếp theo thứ tự xuất hiện trong câu
+- BỎ QUA các từ cơ bản: the, of, a, an, and, or, but, in, on, at, to, for, with, by, from, is, are, was, were, be, been, have, has, had, do, does, did, will, would, could, should, may, might, can, must, shall
+- CHỈ giải thích từ có nghĩa quan trọng, từ khó, từ chuyên môn
+- Giải thích ngắn gọn: [từ] = [nghĩa tiếng Việt]
+- Sắp xếp theo thứ tự xuất hiện
+- Tối đa 8-10 từ quan trọng nhất
 
-Format:
-• [từ/cụm từ]: [nghĩa tiếng Việt] ([từ loại])"""
+Ví dụ format:
+• [từ quan trọng]: [nghĩa tiếng Việt]"""
 
             print(f"[Vocab AI] Analyzing vocabulary for: {text[:50]}...")
             response = self.gemini_model.generate_content(prompt)
             explanation = response.text.strip()
             
             if explanation:
-                return f"🤖 AI phân tích từ vựng:\n\n{explanation}"
+                return f"📚 Từ vựng quan trọng:\n\n{explanation}"
             else:
                 return "❌ Không thể phân tích từ vựng"
                 
