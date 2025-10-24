@@ -2183,17 +2183,15 @@ class CambridgeDictionaryApp:
                 ))
                 return
             
-            # For 2+ words, translate with context using AI
+            # For 2+ words, translate with context using AI (combined method to save API requests)
             if self.gemini_enabled:
-                # Start vocabulary explanation in background
-                vocab_explanation = self._get_vocab_explanation(text)
-                # Translation with streaming and context
-                translation_result = self._translate_with_gemini(text, context)
-                # Final update with vocab explanation
+                # Combined translation and vocabulary explanation in 1 AI request
+                translation_result, vocab_explanation = self._translate_with_gemini_combined(text, context)
+                # Final update with both results
                 self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             else:
                 translation_result = self._translate_simple(text)
-                vocab_explanation = self._get_vocab_explanation(text)
+                vocab_explanation = "AI chưa khả dụng. Không thể phân tích từ vựng."
                 self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             
         except Exception as e:
@@ -2201,8 +2199,161 @@ class CambridgeDictionaryApp:
             print(error_msg)
             self.root.after(0, lambda: self._update_translation_result(error_msg, "Không thể phân tích từ vựng"))
     
+    def _translate_with_gemini_combined(self, text, context=""):
+        """Dịch văn bản và giải thích từ vựng trong 1 AI request để tiết kiệm API"""
+        max_retries = len(self.api_keys)
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                if not self.gemini_enabled:
+                    translation = self._translate_simple(text)
+                    vocab_explanation = "AI chưa khả dụng. Không thể phân tích từ vựng."
+                    return translation, vocab_explanation
+                    
+                if context:
+                    prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt và giải thích từ vựng quan trọng:
+
+Văn bản: "{text}"
+Ngữ cảnh: "{context}"
+
+Yêu cầu:
+1. Dịch tự nhiên, dễ hiểu, phù hợp ngữ cảnh
+2. Giải thích CHỈ các từ/cụm từ quan trọng (bỏ qua: the, of, a, an, and, or, but, in, on, at, to, for, with, by, from, is, are, was, were, be, been, have, has, had, do, does, did, will, would, could, should, may, might, can, must, shall)
+3. Format chính xác:
+   BẢN DỊCH:
+   [bản dịch tiếng Việt]
+   
+   TỪ VỰNG QUAN TRỌNG:
+   • [từ 1]: [nghĩa tiếng Việt]
+   • [từ 2]: [nghĩa tiếng Việt]
+   • [từ 3]: [nghĩa tiếng Việt]"""
+                else:
+                    prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt và giải thích từ vựng quan trọng:
+
+"{text}"
+
+Yêu cầu:
+1. Dịch tự nhiên, dễ hiểu
+2. Giải thích CHỈ các từ/cụm từ quan trọng (bỏ qua: the, of, a, an, and, or, but, in, on, at, to, for, with, by, from, is, are, was, were, be, been, have, has, had, do, does, did, will, would, could, should, may, might, can, must, shall)
+3. Format chính xác:
+   BẢN DỊCH:
+   [bản dịch tiếng Việt]
+   
+   TỪ VỰNG QUAN TRỌNG:
+   • [từ 1]: [nghĩa tiếng Việt]
+   • [từ 2]: [nghĩa tiếng Việt]
+   • [từ 3]: [nghĩa tiếng Việt]"""
+
+                print(f"[AI Combined] Translating and analyzing: {text[:50]}...")
+                response = self.gemini_model.generate_content(prompt, stream=True)
+                
+                # Collect streaming text
+                full_response = ""
+                for chunk in response:
+                    if hasattr(chunk, 'text') and chunk.text:
+                        full_response += chunk.text
+                        # Update UI in real-time with translation only
+                        self.root.after(0, lambda t=full_response: self._update_translation_streaming_combined(t))
+                
+                # Parse response to separate translation and vocabulary
+                translation, vocab_explanation = self._parse_combined_response(full_response.strip())
+                return translation, vocab_explanation
+                
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Gemini combined translation failed: {error_msg}")
+                
+                # Handle API error and try switching keys
+                error_type = self._handle_api_error(error_msg)
+                
+                if error_type == "switched":
+                    retry_count += 1
+                    print(f"[Combined Translation] Retrying with new key (attempt {retry_count}/{max_retries})")
+                    continue  # Retry with new key
+                elif error_type == "exhausted":
+                    error_display = "⚠️ Tất cả API keys đã hết - Sử dụng Google Translate"
+                elif "api" in error_msg.lower() and "key" in error_msg.lower():
+                    error_display = "⚠️ API key không hợp lệ - Sử dụng Google Translate"
+                elif "network" in error_msg.lower() or "connection" in error_msg.lower():
+                    error_display = "⚠️ Lỗi kết nối - Sử dụng Google Translate"
+                else:
+                    error_display = f"⚠️ Lỗi AI: {type(e).__name__} - Sử dụng Google Translate"
+                
+                # Cập nhật UI với thông báo lỗi
+                self.root.after(0, lambda: self._update_translation_streaming_combined(error_display))
+                
+                # Fallback to Google Translate
+                translation = self._translate_simple(text)
+                vocab_explanation = "⚠️ Không thể phân tích từ vựng"
+                return translation, vocab_explanation
+        
+        # If all retries exhausted, fallback
+        translation = self._translate_simple(text)
+        vocab_explanation = "⚠️ Không thể phân tích từ vựng"
+        return translation, vocab_explanation
+    
+    def _parse_combined_response(self, response):
+        """Parse response để tách translation và vocabulary explanation"""
+        try:
+            # Tìm phần BẢN DỊCH
+            translation_start = response.find("BẢN DỊCH:")
+            vocab_start = response.find("TỪ VỰNG QUAN TRỌNG:")
+            
+            translation = ""
+            vocab_explanation = ""
+            
+            if translation_start != -1:
+                if vocab_start != -1:
+                    # Có cả 2 phần
+                    translation = response[translation_start + 10:vocab_start].strip()
+                    vocab_explanation = response[vocab_start:].strip()
+                else:
+                    # Chỉ có translation
+                    translation = response[translation_start + 10:].strip()
+                    vocab_explanation = "Không có từ vựng quan trọng"
+            else:
+                # Fallback: lấy dòng đầu làm translation
+                lines = response.split('\n')
+                translation = lines[0].strip() if lines else response
+                vocab_explanation = "Không thể phân tích từ vựng"
+            
+            # Clean up translation
+            if translation.startswith('"') and translation.endswith('"'):
+                translation = translation[1:-1]
+            if translation.startswith("'") and translation.endswith("'"):
+                translation = translation[1:-1]
+            
+            # Clean up vocabulary
+            if vocab_explanation and not vocab_explanation.startswith("TỪ VỰNG QUAN TRỌNG:"):
+                vocab_explanation = f"TỪ VỰNG QUAN TRỌNG:\n\n{vocab_explanation}"
+            
+            return translation, vocab_explanation
+            
+        except Exception as e:
+            print(f"[Parse Error] {e}")
+            return response, "Không thể phân tích từ vựng"
+    
+    def _update_translation_streaming_combined(self, full_response):
+        """Cập nhật UI với response đầy đủ (chỉ hiển thị translation)"""
+        try:
+            # Parse để lấy chỉ translation
+            translation, _ = self._parse_combined_response(full_response)
+            self.translate_output.config(state=tk.NORMAL)
+            self.translate_output.delete("1.0", tk.END)
+            self.translate_output.insert("1.0", translation)
+            self.translate_output.config(state=tk.DISABLED)
+            self.root.update()
+        except Exception as e:
+            print(f"[Streaming Error] {e}")
+            self.translate_output.config(state=tk.NORMAL)
+            self.translate_output.delete("1.0", tk.END)
+            self.translate_output.insert("1.0", full_response)
+            self.translate_output.config(state=tk.DISABLED)
+            self.root.update()
+
     def _translate_with_gemini(self, text, context=""):
-        """Dịch văn bản bằng Gemini AI với ngữ cảnh"""
+        """Dịch văn bản bằng Gemini AI với ngữ cảnh (legacy method)"""
         max_retries = len(self.api_keys)
         retry_count = 0
         
