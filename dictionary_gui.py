@@ -105,20 +105,22 @@ class CambridgeDictionaryApp:
         
         # Translator với retry logic
         self.translator = GoogleTranslator(source='en', target='vi')
-        # Gemini context-aware - Hardcoded API key
-        self.gemini_api_key = 'AIzaSyCz0JtTfcbSjhQ54wux1QPHvQGDGCjbzmw'
+        
+        # API Key Rotation System - Multiple API keys for extended quota
+        self.api_keys = [
+            'AIzaSyCz0JtTfcbSjhQ54wux1QPHvQGDGCjbzmw',  # Key 1
+            'AIzaSyCaAHdPoLt4ZiJMv3Kv5b6-X9UWrkNCYDo',  # Key 2
+            'AIzaSyCz7CazBX2o2-hfBag4pQuKYJXOqKTgrm8',  # Key 3
+            'AIzaSyAe7C3CSmAb8j7NuqZSxXJpWO3DITUaqZA',  # Key 4
+            'AIzaSyA-fqbIETEndKrMmaT83GEFvFNQ1STmOxQ',  # Key 5
+            # Có thể thêm nhiều keys hơn tại đây
+        ]
+        self.current_key_index = 0
         self.gemini_enabled = False
-        if self.gemini_api_key:
-            try:
-                genai.configure(api_key=self.gemini_api_key)
-                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
-                self.gemini_enabled = True
-                print("[Gemini] Initialized successfully with gemini-2.0-flash")
-            except Exception as e:
-                print(f"[Gemini] Failed to initialize: {e}")
-                self.gemini_enabled = False
-        else:
-            print("[Gemini] API key not found. Set GEMINI_API_KEY to enable AI features.")
+        self.gemini_model = None
+        
+        # Initialize with first available key
+        self._initialize_gemini()
 
         # Cache để tăng tốc EXTREME
         self.translation_cache = {}
@@ -1518,50 +1520,129 @@ class CambridgeDictionaryApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def ai_translate_with_context(self, word: str, defs_en: list, context: str):
-        try:
-            prompt = (
-                "You are a bilingual English-Vietnamese lexicographer. Given an English headword, its brief glosses, "
-                "and an optional user-provided context, produce: (1) a concise Vietnamese meaning of the headword "
-                "that best fits the context (≤6 words), and (2) one short English example sentence that naturally uses the word. "
-                "Output as JSON: {\"vi_meaning\": string, \"example_en\": string}.\n\n"
-                f"Headword: {word}\nGlosses: {defs_en}\nContext: {context or '(none)'}\n"
-            )
-            print(f"[AI] Calling Gemini for '{word}' with context: {context[:50] if context else '(none)'}")
-            resp = self.gemini_model.generate_content(prompt)
-            text = (getattr(resp, 'text', None) or '').strip()
-            print(f"[AI] Response: {text[:200]}")
-            vi, ex = None, None
-            import json as _json, re as _re
-            m = _re.search(r"\{[\s\S]*\}", text)
-            if m:
-                try:
-                    obj = _json.loads(m.group(0))
-                    vi = obj.get('vi_meaning')
-                    ex = obj.get('example_en')
-                    print(f"[AI] Parsed: vi={vi}, ex={ex}")
-                except Exception as parse_err:
-                    print(f"[AI] JSON parse error: {parse_err}")
-            if not vi and text:
-                vi = text.split('\n')[0][:60]
-                print(f"[AI] Fallback vi from first line: {vi}")
-            if not ex:
-                ex = f"{word.capitalize()} is used naturally in this context."
-            return (vi.strip() if vi else None), (ex.strip() if ex else None)
-        except Exception as e:
-            print(f"[AI] Error: {type(e).__name__}: {str(e)}")
+        max_retries = len(self.api_keys)
+        retry_count = 0
+        
+        while retry_count < max_retries:
             try:
-                if hasattr(self, 'ai_status_var'):
-                    self.ai_status_var.set(f"Lỗi: {type(e).__name__}")
-                if hasattr(self, 'ai_translate_btn'):
-                    self.ai_translate_btn.configure(
-                        state=tk.NORMAL,
-                        text="AI dịch theo ngữ cảnh",
-                        bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
-                        fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
-                    )
-            except Exception:
-                pass
-            return None, None
+                if not self.gemini_enabled:
+                    return None, None
+                    
+                prompt = (
+                    "You are a bilingual English-Vietnamese lexicographer. Given an English headword, its brief glosses, "
+                    "and an optional user-provided context, produce: (1) a concise Vietnamese meaning of the headword "
+                    "that best fits the context (≤6 words), and (2) one short English example sentence that naturally uses the word. "
+                    "Output as JSON: {\"vi_meaning\": string, \"example_en\": string}.\n\n"
+                    f"Headword: {word}\nGlosses: {defs_en}\nContext: {context or '(none)'}\n"
+                )
+                print(f"[AI] Calling Gemini for '{word}' with context: {context[:50] if context else '(none)'}")
+                resp = self.gemini_model.generate_content(prompt)
+                text = (getattr(resp, 'text', None) or '').strip()
+                print(f"[AI] Response: {text[:200]}")
+                vi, ex = None, None
+                import json as _json, re as _re
+                m = _re.search(r"\{[\s\S]*\}", text)
+                if m:
+                    try:
+                        obj = _json.loads(m.group(0))
+                        vi = obj.get('vi_meaning')
+                        ex = obj.get('example_en')
+                        print(f"[AI] Parsed: vi={vi}, ex={ex}")
+                    except Exception as parse_err:
+                        print(f"[AI] JSON parse error: {parse_err}")
+                if not vi and text:
+                    vi = text.split('\n')[0][:60]
+                    print(f"[AI] Fallback vi from first line: {vi}")
+                if not ex:
+                    ex = f"{word.capitalize()} is used naturally in this context."
+                return (vi.strip() if vi else None), (ex.strip() if ex else None)
+                
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[AI] Error: {type(e).__name__}: {error_msg}")
+                
+                # Handle API error and try switching keys
+                error_type = self._handle_api_error(error_msg)
+                
+                if error_type == "switched":
+                    retry_count += 1
+                    print(f"[AI] Retrying with new key (attempt {retry_count}/{max_retries})")
+                    continue  # Retry with new key
+                elif error_type == "exhausted":
+                    status_msg = "Tất cả API keys đã hết quota"
+                elif "api" in error_msg.lower() and "key" in error_msg.lower():
+                    status_msg = "API key không hợp lệ"
+                elif "network" in error_msg.lower() or "connection" in error_msg.lower():
+                    status_msg = "Lỗi kết nối mạng"
+                else:
+                    status_msg = f"Lỗi: {type(e).__name__}"
+                
+                try:
+                    if hasattr(self, 'ai_status_var'):
+                        self.ai_status_var.set(status_msg)
+                    if hasattr(self, 'ai_translate_btn'):
+                        self.ai_translate_btn.configure(
+                            state=tk.NORMAL,
+                            text="AI dịch theo ngữ cảnh",
+                            bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
+                            fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
+                        )
+                except Exception:
+                    pass
+                return None, None
+        
+        # If all retries exhausted
+        return None, None
+    
+    def _initialize_gemini(self):
+        """Initialize Gemini with current API key"""
+        if self.current_key_index < len(self.api_keys):
+            try:
+                genai.configure(api_key=self.api_keys[self.current_key_index])
+                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+                self.gemini_enabled = True
+                print(f"[Gemini] ✅ Initialized with API key #{self.current_key_index + 1}/{len(self.api_keys)}")
+                return True
+            except Exception as e:
+                print(f"[Gemini] ❌ Key #{self.current_key_index + 1} failed: {e}")
+                return False
+        else:
+            print("[Gemini] ⚠️ No more API keys available")
+            self.gemini_enabled = False
+            self.gemini_model = None
+            return False
+    
+    def _switch_to_next_key(self):
+        """Switch to next available API key when quota exceeded"""
+        old_index = self.current_key_index
+        self.current_key_index += 1
+        
+        if self.current_key_index < len(self.api_keys):
+            print(f"[Gemini] 🔄 Switching from key #{old_index + 1} to key #{self.current_key_index + 1}")
+            success = self._initialize_gemini()
+            if success:
+                # Show toast notification
+                self.root.after(0, lambda: self.show_toast(f"Chuyển sang API key #{self.current_key_index + 1}"))
+                return True
+            else:
+                # Try next key recursively
+                return self._switch_to_next_key()
+        else:
+            print("[Gemini] 🚫 All API keys exhausted - AI features disabled")
+            self.gemini_enabled = False
+            self.gemini_model = None
+            self.root.after(0, lambda: self.show_toast("Tất cả API keys đã hết quota"))
+            return False
+    
+    def _handle_api_error(self, error_msg):
+        """Handle API errors and switch keys if quota exceeded"""
+        if "quota" in error_msg.lower() or "429" in error_msg:
+            print(f"[Gemini] ⚠️ Quota exceeded for key #{self.current_key_index + 1}")
+            if self._switch_to_next_key():
+                return "switched"  # Successfully switched to new key
+            else:
+                return "exhausted"  # All keys exhausted
+        return "other"  # Other error types
     
     def play_audio(self, audio_url, word, region='uk'):
         """Phát audio từ Cambridge hoặc fallback sang TTS"""
@@ -2124,9 +2205,16 @@ class CambridgeDictionaryApp:
     
     def _translate_with_gemini(self, text, context=""):
         """Dịch văn bản bằng Gemini AI với ngữ cảnh"""
-        try:
-            if context:
-                prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt tự nhiên, sát nghĩa và phù hợp ngữ cảnh:
+        max_retries = len(self.api_keys)
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                if not self.gemini_enabled:
+                    return self._translate_simple(text)
+                    
+                if context:
+                    prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt tự nhiên, sát nghĩa và phù hợp ngữ cảnh:
 
 Văn bản: "{text}"
 Ngữ cảnh: "{context}"
@@ -2136,8 +2224,8 @@ Yêu cầu:
 - Giữ nguyên ý nghĩa
 - Phù hợp với ngữ cảnh đã cho
 - CHỈ trả về bản dịch tiếng Việt, KHÔNG giải thích thêm"""
-            else:
-                prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt tự nhiên, sát nghĩa và phù hợp ngữ cảnh:
+                else:
+                    prompt = f"""Dịch văn bản tiếng Anh sau sang tiếng Việt tự nhiên, sát nghĩa và phù hợp ngữ cảnh:
 
 "{text}"
 
@@ -2147,25 +2235,49 @@ Yêu cầu:
 - Phù hợp ngữ cảnh
 - CHỈ trả về bản dịch tiếng Việt, KHÔNG giải thích thêm"""
 
-            # Streaming response
-            response = self.gemini_model.generate_content(prompt, stream=True)
-            
-            # Collect streaming text
-            translation_parts = []
-            for chunk in response:
-                if hasattr(chunk, 'text') and chunk.text:
-                    translation_parts.append(chunk.text)
-                    # Update UI in real-time
-                    current_text = ''.join(translation_parts)
-                    self.root.after(0, lambda t=current_text: self._update_translation_streaming(t))
-            
-            translation = ''.join(translation_parts).strip()
-            return translation
-            
-        except Exception as e:
-            print(f"Gemini translation failed: {e}")
-            # Fallback to Google Translate
-            return self._translate_simple(text)
+                # Streaming response
+                response = self.gemini_model.generate_content(prompt, stream=True)
+                
+                # Collect streaming text
+                translation_parts = []
+                for chunk in response:
+                    if hasattr(chunk, 'text') and chunk.text:
+                        translation_parts.append(chunk.text)
+                        # Update UI in real-time
+                        current_text = ''.join(translation_parts)
+                        self.root.after(0, lambda t=current_text: self._update_translation_streaming(t))
+                
+                translation = ''.join(translation_parts).strip()
+                return translation
+                
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Gemini translation failed: {error_msg}")
+                
+                # Handle API error and try switching keys
+                error_type = self._handle_api_error(error_msg)
+                
+                if error_type == "switched":
+                    retry_count += 1
+                    print(f"[Translation] Retrying with new key (attempt {retry_count}/{max_retries})")
+                    continue  # Retry with new key
+                elif error_type == "exhausted":
+                    error_display = "⚠️ Tất cả API keys đã hết - Sử dụng Google Translate"
+                elif "api" in error_msg.lower() and "key" in error_msg.lower():
+                    error_display = "⚠️ API key không hợp lệ - Sử dụng Google Translate"
+                elif "network" in error_msg.lower() or "connection" in error_msg.lower():
+                    error_display = "⚠️ Lỗi kết nối - Sử dụng Google Translate"
+                else:
+                    error_display = f"⚠️ Lỗi AI: {type(e).__name__} - Sử dụng Google Translate"
+                
+                # Cập nhật UI với thông báo lỗi
+                self.root.after(0, lambda: self._update_translation_streaming(error_display))
+                
+                # Fallback to Google Translate
+                return self._translate_simple(text)
+        
+        # If all retries exhausted, fallback
+        return self._translate_simple(text)
     
     def _translate_simple(self, text):
         """Dịch văn bản bằng Google Translate"""
@@ -2199,15 +2311,19 @@ Yêu cầu:
     
     def _get_vocab_explanation(self, text):
         """Lấy giải thích từ vựng chi tiết bằng AI"""
-        try:
-            if not self.gemini_enabled:
-                return "AI chưa khả dụng. Không thể phân tích từ vựng."
-            
-            # Tách từ và cụm từ quan trọng
-            words = text.split()
-            if len(words) == 1:
-                # Từ đơn
-                prompt = f"""Phân tích từ tiếng Anh "{text}" và giải thích chi tiết:
+        max_retries = len(self.api_keys)
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                if not self.gemini_enabled:
+                    return "AI chưa khả dụng. Không thể phân tích từ vựng."
+                
+                # Tách từ và cụm từ quan trọng
+                words = text.split()
+                if len(words) == 1:
+                    # Từ đơn
+                    prompt = f"""Phân tích từ tiếng Anh "{text}" và giải thích chi tiết:
 
 1. Nghĩa chính (tiếng Việt)
 2. Từ loại (danh từ, động từ, tính từ...)
@@ -2216,9 +2332,9 @@ Yêu cầu:
 5. Từ đồng nghĩa (nếu có)
 
 Trả lời ngắn gọn, dễ hiểu:"""
-            else:
-                # Câu/đoạn văn - CHỈ giải thích từ quan trọng
-                prompt = f"""Phân tích văn bản tiếng Anh sau và giải thích CHỈ các từ/cụm từ quan trọng:
+                else:
+                    # Câu/đoạn văn - CHỈ giải thích từ quan trọng
+                    prompt = f"""Phân tích văn bản tiếng Anh sau và giải thích CHỈ các từ/cụm từ quan trọng:
 
 "{text}"
 
@@ -2232,18 +2348,37 @@ Yêu cầu:
 Ví dụ format:
 • [từ quan trọng]: [nghĩa tiếng Việt]"""
 
-            print(f"[Vocab AI] Analyzing vocabulary for: {text[:50]}...")
-            response = self.gemini_model.generate_content(prompt)
-            explanation = response.text.strip()
-            
-            if explanation:
-                return f"Từ vựng quan trọng:\n\n{explanation}"
-            else:
-                return "Không thể phân tích từ vựng"
+                print(f"[Vocab AI] Analyzing vocabulary for: {text[:50]}...")
+                response = self.gemini_model.generate_content(prompt)
+                explanation = response.text.strip()
                 
-        except Exception as e:
-            print(f"[Vocab AI] Error: {e}")
-            return f"Lỗi phân tích từ vựng: {str(e)}"
+                if explanation:
+                    return f"Từ vựng quan trọng:\n\n{explanation}"
+                else:
+                    return "Không thể phân tích từ vựng"
+                    
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[Vocab AI] Error: {error_msg}")
+                
+                # Handle API error and try switching keys
+                error_type = self._handle_api_error(error_msg)
+                
+                if error_type == "switched":
+                    retry_count += 1
+                    print(f"[Vocab AI] Retrying with new key (attempt {retry_count}/{max_retries})")
+                    continue  # Retry with new key
+                elif error_type == "exhausted":
+                    return "⚠️ Tất cả API keys đã hết - Không thể phân tích từ vựng"
+                elif "api" in error_msg.lower() and "key" in error_msg.lower():
+                    return "⚠️ API key không hợp lệ - Không thể phân tích từ vựng"
+                elif "network" in error_msg.lower() or "connection" in error_msg.lower():
+                    return "⚠️ Lỗi kết nối - Không thể phân tích từ vựng"
+                else:
+                    return f"⚠️ Lỗi phân tích từ vựng: {type(e).__name__}"
+        
+        # If all retries exhausted
+        return "⚠️ Không thể phân tích từ vựng"
     
     def _clear_translator_ui(self):
         """Xóa tất cả nội dung trong UI dịch văn bản"""
