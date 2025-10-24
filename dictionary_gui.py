@@ -95,9 +95,11 @@ class CambridgeDictionaryApp:
         # Configure modern styling
         self.root.configure(bg="#f8f9fa")
         
-        # Khởi tạo TTS engine
+        # Khởi tạo TTS engine - Chỉ tắt âm thanh tác vụ
         try:
             self.tts_engine = pyttsx3.init()
+            # Tắt âm thanh click button và tác vụ
+            self.tts_engine.setProperty('volume', 0.0)
         except:
             self.tts_engine = None
         
@@ -207,12 +209,49 @@ class CambridgeDictionaryApp:
                 if ai_example_en:
                     item['ai_example_en'] = ai_example_en
                 self.save_vocabulary()
-                messagebox.showinfo("Cập nhật", f"Đã cập nhật '{word}' trong danh sách!")
+                self.show_toast(f"Đã cập nhật '{word}' trong danh sách!")
                 return
         
         self.vocabulary.append(vocab_item)
         self.save_vocabulary()
-        messagebox.showinfo("Thành công", f"Đã thêm '{word}' vào danh sách!")
+        self.show_toast(f"Đã thêm '{word}' vào danh sách!")
+    
+    def show_toast(self, message):
+        """Hiển thị thông báo toast 1s tự đóng - cố định ở giữa màn hình"""
+        toast = tk.Toplevel(self.root)
+        toast.title("")
+        toast.geometry("350x80")
+        toast.resizable(False, False)
+        
+        # Cố định ở giữa màn hình
+        screen_width = toast.winfo_screenwidth()
+        screen_height = toast.winfo_screenheight()
+        x = (screen_width - 350) // 2
+        y = (screen_height - 80) // 2
+        toast.geometry(f"350x80+{x}+{y}")
+        
+        # Làm cho cửa sổ luôn ở trên
+        toast.attributes('-topmost', True)
+        toast.overrideredirect(True)  # Bỏ title bar
+        
+        # Tạo frame với màu nền
+        toast_frame = tk.Frame(toast, bg=self.colors['accent'], relief=tk.RAISED, bd=2)
+        toast_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        # Label thông báo
+        toast_label = tk.Label(
+            toast_frame,
+            text=message,
+            font=("Segoe UI", 13, "bold"),
+            bg=self.colors['accent'],
+            fg=self.colors['white'],
+            wraplength=320,
+            justify=tk.CENTER
+        )
+        toast_label.pack(expand=True)
+        
+        # Tự đóng sau 1s
+        toast.after(1000, toast.destroy)
         
     def setup_ui(self):
         # Modern color scheme
@@ -224,6 +263,7 @@ class CambridgeDictionaryApp:
             'danger': '#ef4444',       # Red
             'dark': '#1f2937',         # Dark gray
             'light': '#f8fafc',        # Light gray
+            'light_gray': '#e5e7eb',   # Light gray for separators
             'white': '#ffffff',
             'border': '#e5e7eb'        # Light border
         }
@@ -241,13 +281,13 @@ class CambridgeDictionaryApp:
         self.setup_main_content()
 
         # Create initial status
-        self.update_current_word_display("Welcome")
+        self.update_current_word_display("")
         self.show_welcome()
 
     def update_current_word_display(self, word):
-        display = word.strip() if word else "Welcome"
+        display = word.strip() if word else ""
         if hasattr(self, 'current_word_var'):
-            self.current_word_var.set(f"📄 {display}")
+            self.current_word_var.set(f"{display}")
         
     def setup_header(self):
         """Setup modern header"""
@@ -261,34 +301,38 @@ class CambridgeDictionaryApp:
         
         title_label = tk.Label(
             title_frame,
-            text="📚 Cambridge Dictionary",
+            text="Cambridge Dictionary",
             font=("Segoe UI", 20, "bold"),
             bg=self.colors['primary'],
             fg=self.colors['white']
         )
         title_label.pack(side=tk.LEFT, padx=(0, 20))
         
-        # Dictionary search bar (like Cambridge Dictionary)
-        search_frame = tk.Frame(title_frame, bg=self.colors['white'], relief=tk.SOLID, borderwidth=1)
-        search_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        # Dictionary search bar (like Cambridge Dictionary) - wider
+        search_frame = tk.Frame(header_frame, bg=self.colors['white'], relief=tk.SOLID, borderwidth=1)
+        search_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(20, 20))
         
         self.search_entry = tk.Entry(
             search_frame,
             font=("Segoe UI", 12),
             bg=self.colors['white'],
             relief=tk.FLAT,
-            borderwidth=0,
-            padx=15,
-            pady=8
+            borderwidth=0
         )
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.search_entry.bind('<Return>', self.search_word)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=15, pady=8)
+        self.search_entry.bind('<Return>', self.on_search_enter)
+        
+        # Bind suggestions to search_entry
+        self.search_entry.bind('<KeyRelease>', self.on_key_release)
+        self.search_entry.bind('<Down>', self.focus_suggestion)
+        self.search_entry.bind('<Up>', self.focus_suggestion_up)
+        self.search_entry.bind('<Escape>', lambda e: self.hide_suggestions())
         
         # Search button
         search_btn = tk.Button(
             search_frame,
             text="🔍",
-            font=("Segoe UI", 12),
+            font=("Segoe UI", 16),
             bg=self.colors['secondary'],
             fg=self.colors['white'],
             relief=tk.FLAT,
@@ -306,7 +350,7 @@ class CambridgeDictionaryApp:
         # Text Translator button
         translator_btn = tk.Button(
             btn_frame,
-            text="🌐 Dịch văn bản",
+            text="Dịch văn bản",
             font=("Segoe UI", 10, "bold"),
             bg=self.colors['secondary'],
             fg=self.colors['white'],
@@ -321,7 +365,7 @@ class CambridgeDictionaryApp:
         # Vocabulary button
         vocab_btn = tk.Button(
             btn_frame,
-            text="📚 Vocabulary",
+            text="Vocabulary",
             font=("Segoe UI", 10, "bold"),
             bg=self.colors['accent'],
             fg=self.colors['white'],
@@ -335,11 +379,11 @@ class CambridgeDictionaryApp:
         
     def setup_tab_system(self):
         """Setup single-page status bar"""
-        self.tab_frame = tk.Frame(self.root, bg=self.colors['light'], height=40)
-        self.tab_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
+        self.tab_frame = tk.Frame(self.root, bg=self.colors['light'], height=30)
+        self.tab_frame.pack(fill=tk.X, padx=20, pady=(5, 0))
         self.tab_frame.pack_propagate(False)
 
-        self.current_word_var = tk.StringVar(value="📄 Welcome")
+        self.current_word_var = tk.StringVar(value="")
         self.current_word_label = tk.Label(
             self.tab_frame,
             textvariable=self.current_word_var,
@@ -350,54 +394,10 @@ class CambridgeDictionaryApp:
         self.current_word_label.pack(side=tk.LEFT, padx=10)
         
     def setup_search_bar(self):
-        """Setup modern search bar"""
-        search_frame = tk.Frame(self.root, bg=self.colors['white'])
-        search_frame.pack(fill=tk.X, padx=20, pady=15)
-        
-        # Search container with rounded appearance
-        search_container = tk.Frame(search_frame, bg=self.colors['white'], relief=tk.SOLID, bd=1)
-        search_container.pack(fill=tk.X, ipady=10)
-        
-        # Search entry
-        self.word_entry = tk.Entry(
-            search_container,
-            font=("Segoe UI", 14),
-            relief=tk.FLAT,
-            bd=0,
-            bg=self.colors['white']
-        )
-        self.word_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=15, pady=10)
-        self.word_entry.bind('<Return>', lambda e: self.search_word())
-        
-        # Debounce search typing
-        self._search_after_id = None
-        def _debounced_key_release(event):
-            if self._search_after_id:
-                try:
-                    self.root.after_cancel(self._search_after_id)
-                except Exception:
-                    pass
-            self._search_after_id = self.root.after(250, self.on_key_release, event)
-        self.word_entry.bind('<KeyRelease>', _debounced_key_release)
-        
-        # Search button
-        self.search_btn = tk.Button(
-            search_container,
-            text="🔍 Search",
-            font=("Segoe UI", 12, "bold"),
-            bg=self.colors['secondary'],
-            fg=self.colors['white'],
-            relief=tk.FLAT,
-            padx=20,
-            pady=10,
-            cursor="hand2",
-            command=self.search_word
-        )
-        self.search_btn.pack(side=tk.RIGHT, padx=(0, 15))
-        
-        # Suggestion listbox (hidden initially)
+        """Setup suggestions listbox - positioned in header below search bar"""
+        # Suggestion listbox (hidden initially) - will be positioned in header
         self.suggestion_listbox = tk.Listbox(
-            search_frame,
+            self.root,
             font=("Segoe UI", 11),
             height=5,
             relief=tk.SOLID,
@@ -405,12 +405,13 @@ class CambridgeDictionaryApp:
             bg=self.colors['white'],
             selectbackground=self.colors['secondary']
         )
+        # Don't pack yet - will be positioned dynamically
         self.suggestion_listbox.bind('<<ListboxSelect>>', self.on_suggestion_select)
         self.suggestion_listbox.bind('<Button-1>', self.on_suggestion_click)
         self.suggestion_listbox.bind('<Return>', self.on_suggestion_enter)
+        self.suggestion_listbox.bind('<Up>', self.on_suggestion_up)
+        self.suggestion_listbox.bind('<Down>', self.on_suggestion_down)
         self.suggestion_listbox.bind('<Escape>', lambda e: self.hide_suggestions())
-        self.word_entry.bind('<Down>', self.focus_suggestion)
-        self.word_entry.bind('<Escape>', lambda e: self.hide_suggestions())
         
         # History và common words
         self.search_history = []
@@ -420,7 +421,7 @@ class CambridgeDictionaryApp:
         """Setup main content area"""
         # Main content frame
         self.main_frame = tk.Frame(self.root, bg=self.colors['white'])
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
         
         # Content area for current tab
         self.content_frame = tk.Frame(self.main_frame, bg=self.colors['white'])
@@ -455,7 +456,7 @@ class CambridgeDictionaryApp:
         self.use_context_var = tk.BooleanVar()
         context_checkbox = tk.Checkbutton(
             context_header_frame,
-            text="🎯 Sử dụng ngữ cảnh để dịch chính xác hơn",
+            text="Sử dụng ngữ cảnh để dịch chính xác hơn",
             font=("Segoe UI", 11, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark'],
@@ -500,7 +501,7 @@ class CambridgeDictionaryApp:
 
         self.ai_translate_btn = tk.Button(
             ai_control_frame,
-            text="🤖 AI dịch theo ngữ cảnh",
+            text="AI dịch theo ngữ cảnh",
             font=("Segoe UI", 11, "bold"),
             bg=self.colors['secondary'],
             fg=self.colors['white'],
@@ -543,73 +544,13 @@ class CambridgeDictionaryApp:
         self.result_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
     def show_welcome(self):
-        self.update_current_word_display("Welcome")
+        """Show empty state - no welcome message needed"""
+        self.update_current_word_display("")
         self.reset_ai_ui_state(reset_context=True)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-
-        welcome_frame = tk.Frame(self.scrollable_frame, bg=self.colors['white'])
-        welcome_frame.pack(pady=100)
         
-        # Welcome icon
-        icon_label = tk.Label(
-            welcome_frame,
-            text="📚",
-            font=("Segoe UI", 60),
-            bg=self.colors['white'],
-            fg=self.colors['secondary']
-        )
-        icon_label.pack(pady=20)
-        
-        welcome_label = tk.Label(
-            welcome_frame,
-            text="Welcome to Cambridge Dictionary",
-            font=("Segoe UI", 24, "bold"),
-            bg=self.colors['white'],
-            fg=self.colors['primary']
-        )
-        welcome_label.pack(pady=10)
-        
-        subtitle_label = tk.Label(
-            welcome_frame,
-            text="AI Enhanced Edition",
-            font=("Segoe UI", 14),
-            bg=self.colors['white'],
-            fg=self.colors['dark']
-        )
-        subtitle_label.pack(pady=5)
-        
-        instruction_label = tk.Label(
-            welcome_frame,
-            text="Enter a word above to start exploring definitions",
-            font=("Segoe UI", 12),
-            bg=self.colors['white'],
-            fg=self.colors['dark']
-        )
-        instruction_label.pack(pady=20)
-        
-        # Features
-        features_frame = tk.Frame(welcome_frame, bg=self.colors['white'])
-        features_frame.pack(pady=20)
-        
-        features = [
-            "🔍 Cambridge Dictionary definitions",
-            "🤖 AI-powered Vietnamese translation",
-            "🔊 UK/US pronunciation",
-            "📚 Vocabulary management",
-            "📥 Excel export for Quizlet"
-        ]
-        
-        for feature in features:
-            feature_label = tk.Label(
-                features_frame,
-                text=feature,
-                font=("Segoe UI", 11),
-                bg=self.colors['white'],
-                fg=self.colors['dark'],
-                anchor="w"
-            )
-            feature_label.pack(pady=2, padx=50)
+        # Just show empty state - no welcome message
         
     def clear_results(self):
         self.reset_ai_ui_state(clear_word_info=True)
@@ -695,7 +636,15 @@ class CambridgeDictionaryApp:
                 translation = text
 
             display_text = f"{prefix}{translation}"
-            self.root.after(0, lambda lbl=label, txt=display_text: lbl.config(text=txt))
+            self.root.after(0, lambda lbl=label, txt=display_text: self._safe_update_label(lbl, txt))
+    
+    def _safe_update_label(self, label, text):
+        """Cập nhật label một cách an toàn"""
+        try:
+            if label and label.winfo_exists():
+                label.config(text=text)
+        except:
+            pass
 
     def _google_translate_text(self, text):
         for attempt in range(2):
@@ -772,11 +721,11 @@ class CambridgeDictionaryApp:
             print(f"[AI Batch] Parse error: {e}")
             return {}
     
-    def search_word(self):
-        word = self.word_entry.get().strip()
+    def search_word(self, event=None):
+        word = self.search_entry.get().strip()
 
         if not word:
-            messagebox.showwarning("Warning", "Please enter a word!")
+            self.show_toast("Please enter a word!")
             return
 
         # Update status bar for this word
@@ -786,7 +735,7 @@ class CambridgeDictionaryApp:
         self.hide_suggestions()
 
         # Clear search entry
-        self.word_entry.delete(0, tk.END)
+        self.search_entry.delete(0, tk.END)
 
         # Kiểm tra word cache
         if word.lower() in self.word_cache:
@@ -797,7 +746,7 @@ class CambridgeDictionaryApp:
         self.clear_results()
         loading_label = tk.Label(
             self.scrollable_frame,
-            text=f"🔍 Searching for '{word}'...",
+            text=f"Searching for '{word}'...",
             font=("Segoe UI", 16),
             bg=self.colors['white'],
             fg=self.colors['dark']
@@ -845,7 +794,7 @@ class CambridgeDictionaryApp:
                 self.hide_suggestions()
             return
         
-        text = self.word_entry.get().strip().lower()
+        text = self.search_entry.get().strip().lower()
         
         if len(text) < 2:  # Chỉ suggest khi gõ từ 2 ký tự trở lên
             self.hide_suggestions()
@@ -927,14 +876,16 @@ class CambridgeDictionaryApp:
         return sorted(set(suggestions))[:10]
     
     def show_suggestions(self, suggestions):
-        """Hiển thị dropdown suggestions"""
+        """Hiển thị dropdown suggestions ngay dưới search bar, căn giữa như Cambridge Dictionary"""
         self.suggestion_listbox.delete(0, tk.END)
         
         for suggestion in suggestions:
             self.suggestion_listbox.insert(tk.END, suggestion)
         
-        # Hiển thị listbox
-        self.suggestion_listbox.pack(fill=tk.X, pady=(2, 0))
+        # Position suggestions ngay dưới search bar, căn giữa với search bar
+        header_frame = self.root.winfo_children()[0]  # Header là child đầu tiên
+        self.suggestion_listbox.pack(fill=tk.X, padx=20, pady=(0, 5), after=header_frame)
+        
         # Select first item for keyboard nav
         if self.suggestion_listbox.size() > 0:
             self.suggestion_listbox.selection_set(0)
@@ -948,8 +899,8 @@ class CambridgeDictionaryApp:
         selection = self.suggestion_listbox.curselection()
         if selection:
             word = self.suggestion_listbox.get(selection[0])
-            self.word_entry.delete(0, tk.END)
-            self.word_entry.insert(0, word)
+            self.search_entry.delete(0, tk.END)
+            self.search_entry.insert(0, word)
     
     def on_suggestion_click(self, event):
         """Khi click vào suggestion"""
@@ -962,8 +913,8 @@ class CambridgeDictionaryApp:
                 self.suggestion_listbox.selection_clear(0, tk.END)
                 self.suggestion_listbox.selection_set(index)
                 word = self.suggestion_listbox.get(index)
-                self.word_entry.delete(0, tk.END)
-                self.word_entry.insert(0, word)
+                self.search_entry.delete(0, tk.END)
+                self.search_entry.insert(0, word)
                 self.hide_suggestions()
                 self.search_word()
         except:
@@ -985,10 +936,69 @@ class CambridgeDictionaryApp:
             selection = self.suggestion_listbox.curselection()
             if selection:
                 word = self.suggestion_listbox.get(selection[0])
-                self.word_entry.delete(0, tk.END)
-                self.word_entry.insert(0, word)
+                self.search_entry.delete(0, tk.END)
+                self.search_entry.insert(0, word)
                 self.hide_suggestions()
                 self.search_word()
+        except:
+            pass
+        return 'break'
+    
+    def on_search_enter(self, event):
+        """Xử lý Enter trong search entry - chọn gợi ý đầu tiên nếu có"""
+        if self.suggestion_listbox.winfo_viewable() and self.suggestion_listbox.size() > 0:
+            # Chọn gợi ý đầu tiên
+            word = self.suggestion_listbox.get(0)
+            self.search_entry.delete(0, tk.END)
+            self.search_entry.insert(0, word)
+            self.hide_suggestions()
+            self.search_word()
+        else:
+            # Tra từ hiện tại
+            self.search_word()
+        return 'break'
+    
+    def focus_suggestion_up(self, event):
+        """Xử lý phím Up trong search entry"""
+        if self.suggestion_listbox.winfo_viewable() and self.suggestion_listbox.size() > 0:
+            self.suggestion_listbox.focus_set()
+            # Chọn item cuối cùng
+            last_index = self.suggestion_listbox.size() - 1
+            self.suggestion_listbox.activate(last_index)
+            self.suggestion_listbox.selection_clear(0, tk.END)
+            self.suggestion_listbox.selection_set(last_index)
+        return 'break'
+    
+    def on_suggestion_up(self, event):
+        """Xử lý phím Up trong suggestion listbox"""
+        try:
+            current = self.suggestion_listbox.curselection()
+            if current:
+                current_index = current[0]
+                if current_index > 0:
+                    new_index = current_index - 1
+                    self.suggestion_listbox.selection_clear(0, tk.END)
+                    self.suggestion_listbox.selection_set(new_index)
+                    self.suggestion_listbox.activate(new_index)
+                else:
+                    # Quay về search entry
+                    self.search_entry.focus_set()
+                    self.hide_suggestions()
+        except:
+            pass
+        return 'break'
+    
+    def on_suggestion_down(self, event):
+        """Xử lý phím Down trong suggestion listbox"""
+        try:
+            current = self.suggestion_listbox.curselection()
+            if current:
+                current_index = current[0]
+                if current_index < self.suggestion_listbox.size() - 1:
+                    new_index = current_index + 1
+                    self.suggestion_listbox.selection_clear(0, tk.END)
+                    self.suggestion_listbox.selection_set(new_index)
+                    self.suggestion_listbox.activate(new_index)
         except:
             pass
         return 'break'
@@ -1003,11 +1013,18 @@ class CambridgeDictionaryApp:
             
             soup = BeautifulSoup(response.content, 'lxml')
             
+            # Kiểm tra từ có tồn tại trong Cambridge Dictionary
+            if self._is_word_not_found(soup):
+                return None
+            
             phonetics = self._get_phonetics_fast(soup)
             definitions = self._get_definitions_fast(soup)
             
-            # Dịch TỪ sang tiếng Việt (không phải definition)
-            word_meaning_vi = self.translate_text(word)
+            # Chỉ dịch nếu từ tồn tại
+            if definitions:  # Chỉ dịch nếu có definitions
+                word_meaning_vi = self.translate_text(word)
+            else:
+                word_meaning_vi = ""
             
             # Lấy audio URLs từ Cambridge
             audio_urls = self._get_audio_urls(soup)
@@ -1025,6 +1042,29 @@ class CambridgeDictionaryApp:
         except Exception as e:
             print(f"Error: {e}")
             return None
+    
+    def _is_word_not_found(self, soup):
+        """Kiểm tra từ có tồn tại trong Cambridge Dictionary"""
+        try:
+            # Kiểm tra các dấu hiệu từ không tồn tại
+            not_found_indicators = [
+                "Sorry, we couldn't find any results",
+                "No results found",
+                "We couldn't find any results",
+                "Sorry, no results found"
+            ]
+            
+            page_text = soup.get_text().lower()
+            for indicator in not_found_indicators:
+                if indicator.lower() in page_text:
+                    return True
+            
+            # Kiểm tra có definitions không
+            definitions = self._get_definitions_fast(soup)
+            return len(definitions) == 0
+            
+        except:
+            return False
     
     def _translate_definitions_async(self, definitions):
         """Pre-translate các định nghĩa trong background"""
@@ -1134,7 +1174,7 @@ class CambridgeDictionaryApp:
         
         error_label = tk.Label(
             error_frame,
-            text=f"❌ Word '{word}' not found",
+            text=f"Word '{word}' not found",
             font=("Arial", 16, "bold"),
             bg="white",
             fg="#E74C3C"
@@ -1268,7 +1308,7 @@ class CambridgeDictionaryApp:
         
         add_vocab_btn = tk.Button(
             action_frame,
-            text="📚 Add to Vocabulary",
+            text="Add to Vocabulary",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['accent'],
             fg=self.colors['white'],
@@ -1302,6 +1342,11 @@ class CambridgeDictionaryApp:
         """Hiển thị định nghĩa với giao diện đẹp"""
         def_container = tk.Frame(parent, bg=self.colors['white'])
         def_container.pack(fill=tk.X, pady=15, anchor=tk.W)
+        
+        # Thêm đường kẻ phân biệt giữa các nghĩa cùng mức độ
+        if idx > 1:
+            separator = tk.Frame(def_container, height=1, bg=self.colors['light_gray'])
+            separator.pack(fill=tk.X, pady=(0, 15))
         
         # Part of speech
         if definition['pos']:
@@ -1461,7 +1506,7 @@ class CambridgeDictionaryApp:
                     if hasattr(self, 'ai_translate_btn'):
                         self.ai_translate_btn.configure(
                             state=tk.NORMAL,
-                            text="🤖 AI dịch theo ngữ cảnh",
+                            text="AI dịch theo ngữ cảnh",
                             bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
                             fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
                         )
@@ -1510,7 +1555,7 @@ class CambridgeDictionaryApp:
                 if hasattr(self, 'ai_translate_btn'):
                     self.ai_translate_btn.configure(
                         state=tk.NORMAL,
-                        text="🤖 AI dịch theo ngữ cảnh",
+                        text="AI dịch theo ngữ cảnh",
                         bg=self.colors['secondary'] if self.gemini_enabled else self.colors['border'],
                         fg=self.colors['white'] if self.gemini_enabled else self.colors['dark']
                     )
@@ -1603,12 +1648,12 @@ class CambridgeDictionaryApp:
                 getattr(self, 'current_ai_example_en', None)
             )
         else:
-            messagebox.showwarning("Cảnh báo", "Vui lòng tra từ trước!")
+            self.show_toast("Vui lòng tra từ trước!")
     
     def export_to_excel(self, clear_after_export=False):
         """Export từ vựng ra Excel cho Quizlet"""
         if not self.vocabulary:
-            messagebox.showwarning("Cảnh báo", "Chưa có từ vựng nào để export!")
+            self.show_toast("Chưa có từ vựng nào để export!")
             return
         
         try:
@@ -1713,24 +1758,16 @@ class CambridgeDictionaryApp:
             
             # Thông báo thành công
             word_count = len(self.vocabulary)
-            messagebox.showinfo(
-                "Thành công", 
-                f"✅ Đã export {word_count} từ vào file:\n{file_path}\n\n"
-                "Bạn có thể import file này vào Quizlet!"
-            )
+            self.show_toast(f"Đã export {word_count} từ vào file!")
             
             # Xóa từ vựng nếu user chọn
             if clear_after_export:
                 self.vocabulary = []
                 self.save_vocabulary()
-                messagebox.showinfo(
-                    "Đã xóa",
-                    f"🗑️ Đã xóa {word_count} từ vựng cũ!\n\n"
-                    "Bạn có thể bắt đầu lưu từ mới."
-                )
+                self.show_toast(f"Đã xóa {word_count} từ vựng cũ!")
             
         except Exception as e:
-            messagebox.showerror("Lỗi", f"Không thể export: {str(e)}")
+            self.show_toast(f"Lỗi: {str(e)}")
     
     def show_vocabulary(self):
         vocab_window = tk.Toplevel(self.root)
@@ -1739,7 +1776,7 @@ class CambridgeDictionaryApp:
         
         self.vocab_title_label = tk.Label(
             vocab_window,
-            text=f"📚 Từ vựng của tôi ({len(self.vocabulary)} từ)",
+            text=f"Từ vựng của tôi ({len(self.vocabulary)} từ)",
             font=("Arial", 16, "bold"),
             bg="#8E44AD",
             fg="white",
@@ -1767,8 +1804,8 @@ class CambridgeDictionaryApp:
             selection = vocab_listbox.curselection()
             if selection:
                 word = self.vocabulary[selection[0]]['word']
-                self.word_entry.delete(0, tk.END)
-                self.word_entry.insert(0, word)
+                self.search_entry.delete(0, tk.END)
+                self.search_entry.insert(0, word)
                 vocab_window.destroy()
                 self.search_word()
         
@@ -1788,7 +1825,7 @@ class CambridgeDictionaryApp:
         
         def delete_all():
             if not self.vocabulary:
-                messagebox.showinfo("Thông báo", "Danh sách đã trống!")
+                self.show_toast("Danh sách đã trống!")
                 return
             
             count = len(self.vocabulary)
@@ -1800,7 +1837,7 @@ class CambridgeDictionaryApp:
                 self.vocabulary = []
                 self.save_vocabulary()
                 vocab_listbox.delete(0, tk.END)
-                messagebox.showinfo("Đã xóa", f"🗑️ Đã xóa {count} từ!")
+                self.show_toast(f"Đã xóa {count} từ!")
                 vocab_window.destroy()
         
         tk.Button(
@@ -1827,7 +1864,7 @@ class CambridgeDictionaryApp:
         
         tk.Button(
             btn_frame, 
-            text="🗑️ Xóa TẤT CẢ", 
+            text="Xóa TẤT CẢ", 
             font=("Arial", 11, "bold"), 
             bg="#C0392B", 
             fg="white", 
@@ -1838,7 +1875,7 @@ class CambridgeDictionaryApp:
         
         tk.Button(
             btn_frame, 
-            text="📥 Export Excel", 
+            text="Export Excel", 
             font=("Arial", 11, "bold"), 
             bg="#27AE60", 
             fg="white", 
@@ -1862,7 +1899,7 @@ class CambridgeDictionaryApp:
         # Title
         title_label = tk.Label(
             translator_frame,
-            text="🌐 Dịch văn bản AI",
+            text="Dịch văn bản AI",
             font=("Segoe UI", 24, "bold"),
             bg=self.colors['white'],
             fg=self.colors['primary']
@@ -1890,7 +1927,7 @@ class CambridgeDictionaryApp:
         # Input label
         tk.Label(
             left_column,
-            text="📝 Văn bản cần dịch:",
+            text="Văn bản cần dịch:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
@@ -1921,7 +1958,7 @@ class CambridgeDictionaryApp:
         # Translation label
         tk.Label(
             right_column,
-            text="✅ Bản dịch:",
+            text="Bản dịch:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
@@ -1949,7 +1986,7 @@ class CambridgeDictionaryApp:
         # Translate button
         translate_btn = tk.Button(
             btn_frame,
-            text="🤖 Dịch",
+            text="Dịch",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['secondary'],
             fg=self.colors['white'],
@@ -1964,7 +2001,7 @@ class CambridgeDictionaryApp:
         # Clear button
         clear_btn = tk.Button(
             btn_frame,
-            text="🗑️ Xóa",
+            text="Xóa",
             font=("Segoe UI", 11),
             bg="#ef4444",
             fg=self.colors['white'],
@@ -1983,7 +2020,7 @@ class CambridgeDictionaryApp:
         # Vocabulary explanation label
         tk.Label(
             vocab_section,
-            text="📚 Giải thích từ vựng:",
+            text="Giải thích từ vựng:",
             font=("Segoe UI", 12, "bold"),
             bg=self.colors['white'],
             fg=self.colors['dark']
@@ -2008,7 +2045,7 @@ class CambridgeDictionaryApp:
         if not self.gemini_enabled:
             warning_label = tk.Label(
                 translator_frame,
-                text="⚠️ AI chưa khả dụng. Sẽ sử dụng Google Translate.",
+                text="AI chưa khả dụng. Sẽ sử dụng Google Translate.",
                 font=("Segoe UI", 10),
                 bg=self.colors['white'],
                 fg=self.colors['warning']
@@ -2061,7 +2098,7 @@ class CambridgeDictionaryApp:
                 translation = self._translate_simple(text)
                 vocab_explanation = self._get_vocab_explanation(text)
                 self.root.after(0, lambda: self._update_translation_result(
-                    f"💡 Gợi ý: Đây là 1 từ đơn. Bạn có thể tra từ điển để xem nghĩa chi tiết hơn.\n\n"
+                    f"Gợi ý: Đây là 1 từ đơn. Bạn có thể tra từ điển để xem nghĩa chi tiết hơn.\n\n"
                     f"Nghĩa: {translation}",
                     vocab_explanation
                 ))
@@ -2081,9 +2118,9 @@ class CambridgeDictionaryApp:
                 self.root.after(0, lambda: self._update_translation_result(translation_result, vocab_explanation))
             
         except Exception as e:
-            error_msg = f"❌ Lỗi dịch: {str(e)}"
+            error_msg = f"Lỗi dịch: {str(e)}"
             print(error_msg)
-            self.root.after(0, lambda: self._update_translation_result(error_msg, "❌ Không thể phân tích từ vựng"))
+            self.root.after(0, lambda: self._update_translation_result(error_msg, "Không thể phân tích từ vựng"))
     
     def _translate_with_gemini(self, text, context=""):
         """Dịch văn bản bằng Gemini AI với ngữ cảnh"""
@@ -2123,7 +2160,7 @@ Yêu cầu:
                     self.root.after(0, lambda t=current_text: self._update_translation_streaming(t))
             
             translation = ''.join(translation_parts).strip()
-            return f"🤖 AI dịch:\n\n{translation}"
+            return translation
             
         except Exception as e:
             print(f"Gemini translation failed: {e}")
@@ -2135,9 +2172,9 @@ Yêu cầu:
         try:
             translator = GoogleTranslator(source='en', target='vi')
             translation = translator.translate(text)
-            return f"🌐 Google Translate:\n\n{translation}"
+            return f"Google Translate:\n\n{translation}"
         except Exception as e:
-            return f"❌ Lỗi dịch: {str(e)}"
+            return f"Lỗi dịch: {str(e)}"
     
     def _update_translation_result(self, result, vocab_explanation=""):
         """Cập nhật kết quả dịch vào UI"""
@@ -2156,7 +2193,7 @@ Yêu cầu:
         """Cập nhật kết quả dịch streaming (như ChatGPT)"""
         self.translate_output.config(state=tk.NORMAL)
         self.translate_output.delete("1.0", tk.END)
-        self.translate_output.insert("1.0", f"🤖 AI dịch:\n\n{current_text}")
+        self.translate_output.insert("1.0", current_text)
         self.translate_output.config(state=tk.DISABLED)
         self.root.update()
     
@@ -2164,7 +2201,7 @@ Yêu cầu:
         """Lấy giải thích từ vựng chi tiết bằng AI"""
         try:
             if not self.gemini_enabled:
-                return "⚠️ AI chưa khả dụng. Không thể phân tích từ vựng."
+                return "AI chưa khả dụng. Không thể phân tích từ vựng."
             
             # Tách từ và cụm từ quan trọng
             words = text.split()
@@ -2200,13 +2237,13 @@ Ví dụ format:
             explanation = response.text.strip()
             
             if explanation:
-                return f"📚 Từ vựng quan trọng:\n\n{explanation}"
+                return f"Từ vựng quan trọng:\n\n{explanation}"
             else:
-                return "❌ Không thể phân tích từ vựng"
+                return "Không thể phân tích từ vựng"
                 
         except Exception as e:
             print(f"[Vocab AI] Error: {e}")
-            return f"❌ Lỗi phân tích từ vựng: {str(e)}"
+            return f"Lỗi phân tích từ vựng: {str(e)}"
     
     def _clear_translator_ui(self):
         """Xóa tất cả nội dung trong UI dịch văn bản"""
