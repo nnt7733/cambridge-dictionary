@@ -1022,9 +1022,9 @@ class CambridgeDictionaryApp:
             phonetics = self._get_phonetics_fast(soup)
             definitions = self._get_definitions_fast(soup)
             
-            # Chỉ dịch nếu từ tồn tại
+            # Chỉ dịch nếu từ tồn tại - dùng Google Translate cho tra từ vựng thông thường
             if definitions:  # Chỉ dịch nếu có definitions
-                word_meaning_vi = self.translate_text(word)
+                word_meaning_vi = self._google_translate_text(word)
             else:
                 word_meaning_vi = ""
             
@@ -1328,9 +1328,7 @@ class CambridgeDictionaryApp:
             self._display_definition(content_frame, idx, definition, translation_targets)
         if translation_targets:
             self._run_batch_translation(translation_targets)
-        # Auto AI translate if available
-        if self.gemini_enabled:
-            self.root.after(120, self.run_ai_translate_current)
+        # AI translate chỉ khi user click nút "AI dịch theo ngữ cảnh"
 
     def copy_to_clipboard(self, text: str):
         try:
