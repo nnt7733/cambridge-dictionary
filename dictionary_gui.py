@@ -330,6 +330,10 @@ class CambridgeDictionaryApp:
         self.search_entry.bind('<Up>', self.focus_suggestion_up)
         self.search_entry.bind('<Escape>', lambda e: self.hide_suggestions())
         
+        # Bind paste để tự động gợi ý sau khi paste
+        self.search_entry.bind('<Control-v>', self.on_paste)
+        self.search_entry.bind('<Button-3>', self.on_right_click)
+        
         # Search button
         search_btn = tk.Button(
             search_frame,
@@ -786,6 +790,9 @@ class CambridgeDictionaryApp:
             if len(self.search_history) > 50:  # Giữ tối đa 50 từ
                 self.search_history.pop()
         
+        # Tự động thêm từ mới vào common_words.txt nếu chưa có
+        self.add_word_to_suggestions(word)
+        
         self.root.after(0, lambda: self._display_results(word_info))
     
     def on_key_release(self, event):
@@ -809,6 +816,62 @@ class CambridgeDictionaryApp:
             self.show_suggestions(suggestions)
         else:
             self.hide_suggestions()
+    
+    def on_paste(self, event):
+        """Xử lý khi paste (Ctrl+V) - tự động gợi ý sau khi paste"""
+        # Chờ paste hoàn thành
+        self.root.after(50, self._refresh_suggestions_after_paste)
+        return None  # Allow default paste behavior
+    
+    def on_right_click(self, event):
+        """Xử lý khi click chuột phải"""
+        # Chờ paste hoàn thành (nếu user chọn Paste từ menu)
+        self.root.after(100, self._refresh_suggestions_after_paste)
+        return None
+    
+    def _refresh_suggestions_after_paste(self):
+        """Refresh suggestions sau khi paste"""
+        text = self.search_entry.get().strip().lower()
+        if text and len(text) >= 2:
+            suggestions = self.get_suggestions(text)
+            if suggestions:
+                self.show_suggestions(suggestions)
+            else:
+                self.hide_suggestions()
+    
+    def add_word_to_suggestions(self, word):
+        """Thêm từ mới vào common_words.txt"""
+        if not word or len(word) < 2:
+            return
+        
+        word_lower = word.lower().strip()
+        
+        try:
+            # Xác định đường dẫn file
+            if getattr(sys, 'frozen', False):
+                # Chạy từ .exe - lưu vào thư mục exe
+                base_path = Path(sys.executable).resolve().parent
+            else:
+                # Chạy từ .py
+                base_path = Path(__file__).resolve().parent
+            
+            file_path = base_path / 'common_words.txt'
+            
+            # Kiểm tra xem từ đã tồn tại chưa
+            existing_words = []
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    existing_words = [line.strip().lower() for line in f if line.strip()]
+            
+            # Nếu từ chưa tồn tại, thêm vào
+            if word_lower not in existing_words:
+                with open(file_path, 'a', encoding='utf-8') as f:
+                    f.write(f"{word_lower}\n")
+                print(f"✅ Added '{word_lower}' to common_words.txt")
+                # Reload common words
+                self.common_words = self.load_common_words()
+        except Exception as e:
+            print(f"❌ Error adding word to suggestions: {e}")
     
     def load_common_words(self):
         """Load danh sách từ phổ biến từ file common_words.txt"""
