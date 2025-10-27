@@ -1010,17 +1010,10 @@ class CambridgeDictionaryApp:
         return 'break'
     
     def on_search_enter(self, event):
-        """Xử lý Enter trong search entry - chọn gợi ý đầu tiên nếu có"""
-        if self.suggestion_listbox.winfo_viewable() and self.suggestion_listbox.size() > 0:
-            # Chọn gợi ý đầu tiên
-            word = self.suggestion_listbox.get(0)
-            self.search_entry.delete(0, tk.END)
-            self.search_entry.insert(0, word)
-            self.hide_suggestions()
-            self.search_word()
-        else:
-            # Tra từ hiện tại
-            self.search_word()
+        """Xử lý Enter trong search entry - tra từ đang nhập hiện tại"""
+        # Always search for current text in search entry
+        self.hide_suggestions()
+        self.search_word()
         return 'break'
     
     def focus_suggestion_up(self, event):
